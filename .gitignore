@@ -1,1 +1,4 @@
 # Ignore files should not be tracked by Git
+
+# Ignore database files
+data/

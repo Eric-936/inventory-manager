@@ -1,0 +1,1 @@
+# Package marker for request, response, and domain models.

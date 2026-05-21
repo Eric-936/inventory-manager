@@ -1,0 +1,2 @@
+# Add Python dependencies here.
+# Typical packages may include FastAPI, Uvicorn, Jinja2, and a database helper library.
