@@ -1,3 +1,218 @@
-# Implement direct database access for inventory items here.
-# This module should contain CRUD queries and low-stock lookup queries.
-# Keep SQL and persistence details isolated from route handlers.
+import csv
+from datetime import UTC, datetime
+from pathlib import Path
+
+from app.models.inventory import (
+	InventoryCreate,
+	InventoryItem,
+	InventoryUpdate,
+	TransactionRecord,
+)
+
+
+ITEM_FIELDNAMES = [
+	"item_id",
+	"item_name",
+	"storage_type",
+	"shelf_life_type",
+	"package_type",
+	"quantity",
+	"quantity_unit",
+	"batch_number",
+	"expiration_date",
+	"supplier_name",
+	"price_per_unit",
+	"reorder_threshold",
+	"related_dishes",
+	"picture_url",
+]
+
+TRANSACTION_FIELDNAMES = [
+	"action_id",
+	"item_id",
+	"action_type",
+	"action_detail",
+	"quantity_changed",
+	"date_of_action",
+	"staff_name",
+	"comments",
+]
+
+
+class InventoryRepository:
+	def __init__(self, items_path: Path, transactions_path: Path):
+		self.items_path = Path(items_path)
+		self.transactions_path = Path(transactions_path)
+
+	def list_items(self) -> list[InventoryItem]:
+		return [self._parse_item(row) for row in self._read_csv(self.items_path)]
+
+	def list_transactions(self) -> list[TransactionRecord]:
+		return [
+			self._parse_transaction(row)
+			for row in self._read_csv(self.transactions_path)
+		]
+
+	def get_item(self, item_id: int) -> InventoryItem | None:
+		for item in self.list_items():
+			if item.item_id == item_id:
+				return item
+		return None
+
+	def find_item_by_name(self, item_name: str) -> InventoryItem | None:
+		normalized_name = item_name.strip().casefold()
+		for item in self.list_items():
+			if item.item_name.casefold() == normalized_name:
+				return item
+		return None
+
+	def create_item(self, payload: InventoryCreate) -> InventoryItem:
+		item = InventoryItem(item_id=self._next_item_id(), **payload.model_dump())
+		rows = self._read_csv(self.items_path)
+		rows.append(self._serialize_item(item))
+		self._write_csv(self.items_path, ITEM_FIELDNAMES, rows)
+		return item
+
+	def update_item(self, item_id: int, payload: InventoryUpdate) -> InventoryItem | None:
+		rows = self._read_csv(self.items_path)
+		updated_item: InventoryItem | None = None
+
+		for index, row in enumerate(rows):
+			if int(row["item_id"]) != item_id:
+				continue
+
+			current_item = self._parse_item(row)
+			merged = current_item.model_dump()
+			merged.update(payload.model_dump(exclude_none=True))
+			updated_item = InventoryItem.model_validate(merged)
+			rows[index] = self._serialize_item(updated_item)
+			break
+
+		if updated_item is None:
+			return None
+
+		self._write_csv(self.items_path, ITEM_FIELDNAMES, rows)
+		return updated_item
+
+	def delete_item(self, item_id: int) -> bool:
+		rows = self._read_csv(self.items_path)
+		filtered_rows = [row for row in rows if int(row["item_id"]) != item_id]
+		if len(filtered_rows) == len(rows):
+			return False
+		self._write_csv(self.items_path, ITEM_FIELDNAMES, filtered_rows)
+		return True
+
+	def append_transaction(
+		self,
+		*,
+		item_id: int,
+		action_type: str,
+		action_detail: str,
+		quantity_changed: float,
+		staff_name: str,
+		comments: str | None,
+	) -> TransactionRecord:
+		transaction = TransactionRecord(
+			action_id=self._next_action_id(),
+			item_id=item_id,
+			action_type=action_type,
+			action_detail=action_detail,
+			quantity_changed=quantity_changed,
+			date_of_action=datetime.now(UTC),
+			staff_name=staff_name,
+			comments=comments,
+		)
+		rows = self._read_csv(self.transactions_path)
+		rows.append(self._serialize_transaction(transaction))
+		self._write_csv(self.transactions_path, TRANSACTION_FIELDNAMES, rows)
+		return transaction
+
+	def _next_item_id(self) -> int:
+		rows = self._read_csv(self.items_path)
+		if not rows:
+			return 1
+		return max(int(row["item_id"]) for row in rows) + 1
+
+	def _next_action_id(self) -> int:
+		rows = self._read_csv(self.transactions_path)
+		if not rows:
+			return 1
+		return max(int(row["action_id"]) for row in rows) + 1
+
+	def _read_csv(self, path: Path) -> list[dict[str, str]]:
+		if not path.exists():
+			return []
+		with path.open("r", newline="", encoding="utf-8") as csv_file:
+			return list(csv.DictReader(csv_file))
+
+	def _write_csv(
+		self,
+		path: Path,
+		fieldnames: list[str],
+		rows: list[dict[str, str]],
+	) -> None:
+		path.parent.mkdir(parents=True, exist_ok=True)
+		with path.open("w", newline="", encoding="utf-8") as csv_file:
+			writer = csv.DictWriter(csv_file, fieldnames=fieldnames)
+			writer.writeheader()
+			writer.writerows(rows)
+
+	def _parse_item(self, row: dict[str, str]) -> InventoryItem:
+		return InventoryItem(
+			item_id=int(row["item_id"]),
+			item_name=row["item_name"],
+			storage_type=row["storage_type"],
+			shelf_life_type=row["shelf_life_type"],
+			package_type=row["package_type"],
+			quantity=float(row["quantity"]),
+			quantity_unit=row["quantity_unit"],
+			batch_number=row["batch_number"],
+			expiration_date=row["expiration_date"],
+			supplier_name=row["supplier_name"],
+			price_per_unit=float(row["price_per_unit"]),
+			reorder_threshold=float(row["reorder_threshold"]),
+			related_dishes=row.get("related_dishes") or None,
+			picture_url=row.get("picture_url") or None,
+		)
+
+	def _serialize_item(self, item: InventoryItem) -> dict[str, str]:
+		return {
+			"item_id": str(item.item_id),
+			"item_name": item.item_name,
+			"storage_type": item.storage_type,
+			"shelf_life_type": item.shelf_life_type,
+			"package_type": item.package_type,
+			"quantity": str(item.quantity),
+			"quantity_unit": item.quantity_unit,
+			"batch_number": item.batch_number,
+			"expiration_date": item.expiration_date.isoformat(),
+			"supplier_name": item.supplier_name,
+			"price_per_unit": str(item.price_per_unit),
+			"reorder_threshold": str(item.reorder_threshold),
+			"related_dishes": item.related_dishes or "",
+			"picture_url": item.picture_url or "",
+		}
+
+	def _parse_transaction(self, row: dict[str, str]) -> TransactionRecord:
+		return TransactionRecord(
+			action_id=int(row["action_id"]),
+			item_id=int(row["item_id"]),
+			action_type=row["action_type"],
+			action_detail=row["action_detail"],
+			quantity_changed=float(row["quantity_changed"]),
+			date_of_action=row["date_of_action"],
+			staff_name=row["staff_name"],
+			comments=row.get("comments") or None,
+		)
+
+	def _serialize_transaction(self, transaction: TransactionRecord) -> dict[str, str]:
+		return {
+			"action_id": str(transaction.action_id),
+			"item_id": str(transaction.item_id),
+			"action_type": transaction.action_type,
+			"action_detail": transaction.action_detail,
+			"quantity_changed": str(transaction.quantity_changed),
+			"date_of_action": transaction.date_of_action.isoformat(sep=" ", timespec="seconds"),
+			"staff_name": transaction.staff_name,
+			"comments": transaction.comments or "",
+		}
