@@ -2,3 +2,12 @@
 
 # Ignore database files
 data/
+
+# Ignore AI assistant guides
+guide/
+
+# Ignore MacOS system files
+.DS_Store
+
+# Ignore uv lock
+uv.lock

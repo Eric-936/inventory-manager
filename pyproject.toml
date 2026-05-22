@@ -1,0 +1,9 @@
+[project]
+name = "inventory-manager"
+version = "0.1.0"
+description = "This is an inventory manager"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.136.1",
+]
