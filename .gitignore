@@ -9,5 +9,11 @@ guide/
 # Ignore MacOS system files
 .DS_Store
 
+# Ignore Python cache and virtual environment files
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+
 # Ignore uv lock
 uv.lock
