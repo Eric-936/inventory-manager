@@ -17,3 +17,4 @@ __pycache__/
 
 # Ignore uv lock
 uv.lock
+*.egg-info/

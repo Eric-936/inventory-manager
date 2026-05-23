@@ -17,14 +17,15 @@ ITEM_FIELDNAMES = [
 	"shelf_life_type",
 	"package_type",
 	"quantity",
-	"quantity_unit",
-	"batch_number",
+	"quantity_type",
+	"quantity_per_package",
+	"batch_based_inventory",
 	"expiration_date",
 	"supplier_name",
-	"price_per_unit",
-	"reorder_threshold",
+	"pricing",
 	"related_dishes",
-	"picture_url",
+	"picture_of_items",
+	"number_of_packages",
 ]
 
 TRANSACTION_FIELDNAMES = [
@@ -32,9 +33,7 @@ TRANSACTION_FIELDNAMES = [
 	"item_id",
 	"action_type",
 	"action_detail",
-	"quantity_changed",
 	"date_of_action",
-	"staff_name",
 	"comments",
 ]
 
@@ -84,6 +83,14 @@ class InventoryRepository:
 			current_item = self._parse_item(row)
 			merged = current_item.model_dump()
 			merged.update(payload.model_dump(exclude_none=True))
+
+			# Recompute quantity whenever number_of_packages or quantity_per_package
+			# is touched, so the stored value never goes out of sync.
+			packages = merged.get("number_of_packages")
+			qty_per_pkg = merged.get("quantity_per_package")
+			if packages is not None and qty_per_pkg is not None:
+				merged["quantity"] = packages * qty_per_pkg
+
 			updated_item = InventoryItem.model_validate(merged)
 			rows[index] = self._serialize_item(updated_item)
 			break
@@ -108,8 +115,6 @@ class InventoryRepository:
 		item_id: int,
 		action_type: str,
 		action_detail: str,
-		quantity_changed: float,
-		staff_name: str,
 		comments: str | None,
 	) -> TransactionRecord:
 		transaction = TransactionRecord(
@@ -117,9 +122,7 @@ class InventoryRepository:
 			item_id=item_id,
 			action_type=action_type,
 			action_detail=action_detail,
-			quantity_changed=quantity_changed,
 			date_of_action=datetime.now(UTC),
-			staff_name=staff_name,
 			comments=comments,
 		)
 		rows = self._read_csv(self.transactions_path)
@@ -158,39 +161,64 @@ class InventoryRepository:
 			writer.writerows(rows)
 
 	def _parse_item(self, row: dict[str, str]) -> InventoryItem:
+		raw_packages = row.get("number_of_packages")
+		raw_pricing = row.get("pricing")
+		raw_qty = row.get("quantity")
+		raw_qty_per_pkg = row.get("quantity_per_package")
+
+		quantity = float(raw_qty) if raw_qty else 0.0
+		packages = int(raw_packages) if raw_packages else None
+
+		# derive quantity_per_package from existing data when the column is absent
+		if raw_qty_per_pkg:
+			quantity_per_package = float(raw_qty_per_pkg)
+		elif packages:
+			quantity_per_package = quantity / packages
+		else:
+			quantity_per_package = 0.0
+
 		return InventoryItem(
 			item_id=int(row["item_id"]),
 			item_name=row["item_name"],
 			storage_type=row["storage_type"],
 			shelf_life_type=row["shelf_life_type"],
 			package_type=row["package_type"],
-			quantity=float(row["quantity"]),
-			quantity_unit=row["quantity_unit"],
-			batch_number=row["batch_number"],
+			quantity=quantity,
+			quantity_type=row["quantity_type"],
+			quantity_per_package=quantity_per_package,
+			batch_based_inventory=row["batch_based_inventory"],
 			expiration_date=row["expiration_date"],
 			supplier_name=row["supplier_name"],
-			price_per_unit=float(row["price_per_unit"]),
-			reorder_threshold=float(row["reorder_threshold"]),
+			pricing=float(raw_pricing) if raw_pricing else 0.0,
 			related_dishes=row.get("related_dishes") or None,
-			picture_url=row.get("picture_url") or None,
+			picture_of_items=row.get("picture_of_items") or None,
+			number_of_packages=packages,
 		)
 
 	def _serialize_item(self, item: InventoryItem) -> dict[str, str]:
+		# Always derive quantity from packages × per_package when possible,
+		# so the CSV value is always authoritative and never drifts.
+		if item.number_of_packages is not None:
+			stored_quantity = item.number_of_packages * item.quantity_per_package
+		else:
+			stored_quantity = item.quantity or 0.0
+
 		return {
 			"item_id": str(item.item_id),
 			"item_name": item.item_name,
 			"storage_type": item.storage_type,
 			"shelf_life_type": item.shelf_life_type,
 			"package_type": item.package_type,
-			"quantity": str(item.quantity),
-			"quantity_unit": item.quantity_unit,
-			"batch_number": item.batch_number,
+			"quantity": str(stored_quantity),
+			"quantity_type": item.quantity_type,
+			"quantity_per_package": str(item.quantity_per_package),
+			"batch_based_inventory": item.batch_based_inventory,
 			"expiration_date": item.expiration_date.isoformat(),
 			"supplier_name": item.supplier_name,
-			"price_per_unit": str(item.price_per_unit),
-			"reorder_threshold": str(item.reorder_threshold),
+			"pricing": str(item.pricing),
 			"related_dishes": item.related_dishes or "",
-			"picture_url": item.picture_url or "",
+			"picture_of_items": item.picture_of_items or "",
+			"number_of_packages": str(item.number_of_packages) if item.number_of_packages is not None else "",
 		}
 
 	def _parse_transaction(self, row: dict[str, str]) -> TransactionRecord:
@@ -199,9 +227,7 @@ class InventoryRepository:
 			item_id=int(row["item_id"]),
 			action_type=row["action_type"],
 			action_detail=row["action_detail"],
-			quantity_changed=float(row["quantity_changed"]),
 			date_of_action=row["date_of_action"],
-			staff_name=row["staff_name"],
 			comments=row.get("comments") or None,
 		)
 
@@ -211,8 +237,6 @@ class InventoryRepository:
 			"item_id": str(transaction.item_id),
 			"action_type": transaction.action_type,
 			"action_detail": transaction.action_detail,
-			"quantity_changed": str(transaction.quantity_changed),
 			"date_of_action": transaction.date_of_action.isoformat(sep=" ", timespec="seconds"),
-			"staff_name": transaction.staff_name,
 			"comments": transaction.comments or "",
 		}
