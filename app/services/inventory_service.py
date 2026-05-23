@@ -30,8 +30,6 @@ class InventoryService:
 				item_id=created_item.item_id,
 				action_type="add",
 				action_detail="create",
-				quantity_changed=payload.quantity,
-				staff_name="system",
 				comments="Created new inventory item.",
 			)
 			return InventoryUpsertResponse(operation="created", item=created_item)
@@ -47,11 +45,23 @@ class InventoryService:
 			item_id=updated_item.item_id,
 			action_type="add",
 			action_detail="restock",
-			quantity_changed=payload.quantity,
-			staff_name="system",
 			comments="Increased quantity for existing item.",
 		)
 		return InventoryUpsertResponse(operation="updated", item=updated_item)
+
+	def get_item(self, item_id: int) -> InventoryItem:
+		item = self.repository.get_item(item_id)
+		if item is None:
+			raise ItemNotFoundError(f"Item {item_id} was not found.")
+		return item
+
+	def get_item_transactions(self, item_id: int) -> list:
+		all_transactions = self.repository.list_transactions()
+		return sorted(
+			[t for t in all_transactions if t.item_id == item_id],
+			key=lambda t: t.date_of_action,
+			reverse=True,
+		)
 
 	def update_item(self, item_id: int, payload: InventoryUpdate) -> InventoryItem:
 		updated_item = self.repository.update_item(item_id, payload)

@@ -1,5 +1,86 @@
-<!--
-Home page template.
-Display the inventory table here by default, along with search or filter controls
-and a clearly visible low-stock reminder section.
--->
+{% extends "base.html" %}
+
+{% block title %}Inventory — Inventory Manager{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Inventory</h1>
+    <p class="page-subtitle">
+      <span id="visible-count">{{ items | length }}</span> item{{ 's' if items | length != 1 }}
+    </p>
+  </div>
+</div>
+
+{% if items %}
+<div class="search-bar-wrap">
+  <span class="search-icon">🔍</span>
+  <input
+    id="search-input"
+    class="search-input"
+    type="search"
+    placeholder="Search items…"
+    autocomplete="off"
+    aria-label="Search inventory items"
+  />
+</div>
+
+<p id="no-results" class="no-results" hidden>No items match your search.</p>
+
+<div class="card-grid" id="card-grid">
+  {% for item in items %}
+  <a class="card" href="/item/{{ item.item_id }}" data-name="{{ item.item_name | lower }}">
+    <div class="card-header">
+      <span class="storage-badge">{{ item.storage_type }}</span>
+      {% if item.number_of_packages is not none %}
+      <span class="packages-badge">{{ item.number_of_packages }} pkg</span>
+      {% endif %}
+    </div>
+
+    <h2 class="item-name">{{ item.item_name }}</h2>
+
+    <div class="quantity-row">
+      <span class="quantity-value">{{ item.quantity | int if item.quantity == item.quantity | int else item.quantity }}</span>
+      <span class="quantity-unit">{{ item.quantity_type }}</span>
+    </div>
+
+    <div class="card-footer">
+      <span class="supplier-label">{{ item.supplier_name }}</span>
+      {% if item.pricing %}
+      <span class="pricing-label">${{ "%.2f" | format(item.pricing) }}</span>
+      {% endif %}
+    </div>
+  </a>
+  {% endfor %}
+</div>
+
+<script>
+  const input      = document.getElementById('search-input');
+  const cards      = document.querySelectorAll('#card-grid .card');
+  const noResults  = document.getElementById('no-results');
+  const countEl    = document.getElementById('visible-count');
+  const total      = cards.length;
+
+  input.addEventListener('input', () => {
+    const query = input.value.trim().toLowerCase();
+    let visible = 0;
+
+    cards.forEach(card => {
+      const match = !query || card.dataset.name.includes(query);
+      card.style.display = match ? '' : 'none';
+      if (match) visible++;
+    });
+
+    countEl.textContent = visible;
+    noResults.hidden = visible > 0;
+  });
+</script>
+
+{% else %}
+<div class="empty-state">
+  <span class="empty-icon">📦</span>
+  <p>No inventory items yet.</p>
+  <p class="empty-hint">Add items via the API to get started.</p>
+</div>
+{% endif %}
+{% endblock %}

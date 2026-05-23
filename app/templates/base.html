@@ -1,5 +1,25 @@
-<!--
-Base layout template.
-Add the shared HTML structure here, including page head, navigation,
-global styles, and reusable layout sections.
--->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{% block title %}Inventory Manager{% endblock %}</title>
+  <link rel="stylesheet" href="/static/css/style.css" />
+</head>
+<body>
+  <header class="site-header">
+    <div class="header-inner">
+      <span class="site-logo">🍽️</span>
+      <span class="site-name">Inventory Manager</span>
+    </div>
+  </header>
+
+  <main class="main-content">
+    {% block content %}{% endblock %}
+  </main>
+
+  <footer class="site-footer">
+    <p>Restaurant Inventory Manager</p>
+  </footer>
+</body>
+</html>

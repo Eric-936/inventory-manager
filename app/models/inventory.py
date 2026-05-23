@@ -9,22 +9,22 @@ class InventoryBase(BaseModel):
 	shelf_life_type: str
 	package_type: str
 	quantity: float
-	quantity_unit: str
-	batch_number: str
+	quantity_type: str
+	batch_based_inventory: str
 	expiration_date: date
 	supplier_name: str
-	price_per_unit: float
-	reorder_threshold: float
+	pricing: float
 	related_dishes: str | None = None
-	picture_url: str | None = None
+	picture_of_items: str | None = None
+	number_of_packages: int | None = None
 
 	@field_validator(
 		"item_name",
 		"storage_type",
 		"shelf_life_type",
 		"package_type",
-		"quantity_unit",
-		"batch_number",
+		"quantity_type",
+		"batch_based_inventory",
 		"supplier_name",
 		mode="before",
 	)
@@ -37,7 +37,7 @@ class InventoryBase(BaseModel):
 			raise ValueError("Field cannot be empty.")
 		return stripped
 
-	@field_validator("related_dishes", "picture_url", mode="before")
+	@field_validator("related_dishes", "picture_of_items", mode="before")
 	@classmethod
 	def normalize_optional_strings(cls, value: str | None) -> str | None:
 		if value is None:
@@ -45,7 +45,7 @@ class InventoryBase(BaseModel):
 		stripped = value.strip()
 		return stripped or None
 
-	@field_validator("quantity", "price_per_unit", "reorder_threshold")
+	@field_validator("quantity", "pricing")
 	@classmethod
 	def validate_non_negative_numbers(cls, value: float) -> float:
 		if value < 0:
@@ -63,14 +63,14 @@ class InventoryUpdate(BaseModel):
 	shelf_life_type: str | None = None
 	package_type: str | None = None
 	quantity: float | None = None
-	quantity_unit: str | None = None
-	batch_number: str | None = None
+	quantity_type: str | None = None
+	batch_based_inventory: str | None = None
 	expiration_date: date | None = None
 	supplier_name: str | None = None
-	price_per_unit: float | None = None
-	reorder_threshold: float | None = None
+	pricing: float | None = None
 	related_dishes: str | None = None
-	picture_url: str | None = None
+	picture_of_items: str | None = None
+	number_of_packages: int | None = None
 
 	model_config = ConfigDict(extra="forbid")
 
@@ -79,8 +79,8 @@ class InventoryUpdate(BaseModel):
 		"storage_type",
 		"shelf_life_type",
 		"package_type",
-		"quantity_unit",
-		"batch_number",
+		"quantity_type",
+		"batch_based_inventory",
 		"supplier_name",
 		mode="before",
 	)
@@ -93,7 +93,7 @@ class InventoryUpdate(BaseModel):
 			raise ValueError("Field cannot be empty.")
 		return stripped
 
-	@field_validator("related_dishes", "picture_url", mode="before")
+	@field_validator("related_dishes", "picture_of_items", mode="before")
 	@classmethod
 	def normalize_optional_update_strings(cls, value: str | None) -> str | None:
 		if value is None:
@@ -101,7 +101,7 @@ class InventoryUpdate(BaseModel):
 		stripped = value.strip()
 		return stripped or None
 
-	@field_validator("quantity", "price_per_unit", "reorder_threshold")
+	@field_validator("quantity", "pricing")
 	@classmethod
 	def validate_optional_numbers(cls, value: float | None) -> float | None:
 		if value is not None and value < 0:
@@ -120,9 +120,7 @@ class TransactionRecord(BaseModel):
 	item_id: int
 	action_type: str
 	action_detail: str
-	quantity_changed: float
 	date_of_action: datetime
-	staff_name: str
 	comments: str | None = None
 
 
