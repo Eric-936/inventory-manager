@@ -34,9 +34,15 @@ class InventoryService:
 			)
 			return InventoryUpsertResponse(operation="created", item=created_item)
 
+		incoming_packages = payload.number_of_packages
+		if not incoming_packages:
+			raise ValueError("number_of_packages is required to restock an existing item.")
+
+		new_packages = (existing_item.number_of_packages or 0) + incoming_packages
+
 		updated_item = self.repository.update_item(
 			existing_item.item_id,
-			InventoryUpdate(quantity=existing_item.quantity + payload.quantity),
+			InventoryUpdate(number_of_packages=new_packages),
 		)
 		if updated_item is None:
 			raise ItemNotFoundError(f"Item {existing_item.item_id} was not found.")
@@ -45,7 +51,7 @@ class InventoryService:
 			item_id=updated_item.item_id,
 			action_type="add",
 			action_detail="restock",
-			comments="Increased quantity for existing item.",
+			comments=f"Added {incoming_packages} package(s). New total: {new_packages}.",
 		)
 		return InventoryUpsertResponse(operation="updated", item=updated_item)
 

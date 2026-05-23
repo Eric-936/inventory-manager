@@ -1,6 +1,6 @@
 from datetime import date, datetime
 
-from pydantic import BaseModel, ConfigDict, field_validator
+from pydantic import BaseModel, ConfigDict, field_validator, model_validator
 
 
 class InventoryBase(BaseModel):
@@ -8,8 +8,8 @@ class InventoryBase(BaseModel):
 	storage_type: str
 	shelf_life_type: str
 	package_type: str
-	quantity: float
 	quantity_type: str
+	quantity_per_package: float              # required; drives the quantity calculation
 	batch_based_inventory: str
 	expiration_date: date
 	supplier_name: str
@@ -17,6 +17,7 @@ class InventoryBase(BaseModel):
 	related_dishes: str | None = None
 	picture_of_items: str | None = None
 	number_of_packages: int | None = None
+	quantity: float | None = None            # computed: number_of_packages × quantity_per_package
 
 	@field_validator(
 		"item_name",
@@ -45,12 +46,23 @@ class InventoryBase(BaseModel):
 		stripped = value.strip()
 		return stripped or None
 
-	@field_validator("quantity", "pricing")
+	@field_validator("quantity", "quantity_per_package", "pricing")
 	@classmethod
-	def validate_non_negative_numbers(cls, value: float) -> float:
-		if value < 0:
+	def validate_non_negative_numbers(cls, value: float | None) -> float | None:
+		if value is not None and value < 0:
 			raise ValueError("Numeric fields cannot be negative.")
 		return value
+
+	@model_validator(mode="after")
+	def compute_quantity(self) -> "InventoryBase":
+		if self.quantity is None:
+			if self.number_of_packages is None:
+				raise ValueError(
+					"Provide quantity directly, or set both number_of_packages "
+					"and quantity_per_package so it can be calculated automatically."
+				)
+			self.quantity = self.number_of_packages * self.quantity_per_package
+		return self
 
 
 class InventoryCreate(InventoryBase):
@@ -64,6 +76,7 @@ class InventoryUpdate(BaseModel):
 	package_type: str | None = None
 	quantity: float | None = None
 	quantity_type: str | None = None
+	quantity_per_package: float | None = None
 	batch_based_inventory: str | None = None
 	expiration_date: date | None = None
 	supplier_name: str | None = None
@@ -101,7 +114,7 @@ class InventoryUpdate(BaseModel):
 		stripped = value.strip()
 		return stripped or None
 
-	@field_validator("quantity", "pricing")
+	@field_validator("quantity", "quantity_per_package", "pricing")
 	@classmethod
 	def validate_optional_numbers(cls, value: float | None) -> float | None:
 		if value is not None and value < 0:

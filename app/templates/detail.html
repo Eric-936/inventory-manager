@@ -35,11 +35,11 @@
   <dl class="detail-grid">
     <div class="detail-row">
       <dt class="detail-label">Storage type</dt>
-      <dd class="detail-value">{{ item.storage_type }}</dd>
+      <dd class="detail-value">{{ item.storage_type | replace('_', ' ') | title }}</dd>
     </div>
     <div class="detail-row">
       <dt class="detail-label">Shelf life</dt>
-      <dd class="detail-value">{{ item.shelf_life_type }}</dd>
+      <dd class="detail-value">{{ item.shelf_life_type | replace('_', ' ') | title }}</dd>
     </div>
     <div class="detail-row">
       <dt class="detail-label">Package type</dt>
@@ -48,6 +48,10 @@
     <div class="detail-row">
       <dt class="detail-label">Number of packages</dt>
       <dd class="detail-value">{{ item.number_of_packages if item.number_of_packages is not none else '—' }}</dd>
+    </div>
+    <div class="detail-row">
+      <dt class="detail-label">Quantity per package</dt>
+      <dd class="detail-value">{{ item.quantity_per_package }} {{ item.quantity_type }}</dd>
     </div>
     <div class="detail-row">
       <dt class="detail-label">Quantity</dt>

@@ -18,6 +18,7 @@ ITEM_FIELDNAMES = [
 	"package_type",
 	"quantity",
 	"quantity_type",
+	"quantity_per_package",
 	"batch_based_inventory",
 	"expiration_date",
 	"supplier_name",
@@ -82,6 +83,14 @@ class InventoryRepository:
 			current_item = self._parse_item(row)
 			merged = current_item.model_dump()
 			merged.update(payload.model_dump(exclude_none=True))
+
+			# Recompute quantity whenever number_of_packages or quantity_per_package
+			# is touched, so the stored value never goes out of sync.
+			packages = merged.get("number_of_packages")
+			qty_per_pkg = merged.get("quantity_per_package")
+			if packages is not None and qty_per_pkg is not None:
+				merged["quantity"] = packages * qty_per_pkg
+
 			updated_item = InventoryItem.model_validate(merged)
 			rows[index] = self._serialize_item(updated_item)
 			break
@@ -154,32 +163,55 @@ class InventoryRepository:
 	def _parse_item(self, row: dict[str, str]) -> InventoryItem:
 		raw_packages = row.get("number_of_packages")
 		raw_pricing = row.get("pricing")
+		raw_qty = row.get("quantity")
+		raw_qty_per_pkg = row.get("quantity_per_package")
+
+		quantity = float(raw_qty) if raw_qty else 0.0
+		packages = int(raw_packages) if raw_packages else None
+
+		# derive quantity_per_package from existing data when the column is absent
+		if raw_qty_per_pkg:
+			quantity_per_package = float(raw_qty_per_pkg)
+		elif packages:
+			quantity_per_package = quantity / packages
+		else:
+			quantity_per_package = 0.0
+
 		return InventoryItem(
 			item_id=int(row["item_id"]),
 			item_name=row["item_name"],
 			storage_type=row["storage_type"],
 			shelf_life_type=row["shelf_life_type"],
 			package_type=row["package_type"],
-			quantity=float(row["quantity"]) if row.get("quantity") else 0.0,
+			quantity=quantity,
 			quantity_type=row["quantity_type"],
+			quantity_per_package=quantity_per_package,
 			batch_based_inventory=row["batch_based_inventory"],
 			expiration_date=row["expiration_date"],
 			supplier_name=row["supplier_name"],
 			pricing=float(raw_pricing) if raw_pricing else 0.0,
 			related_dishes=row.get("related_dishes") or None,
 			picture_of_items=row.get("picture_of_items") or None,
-			number_of_packages=int(raw_packages) if raw_packages else None,
+			number_of_packages=packages,
 		)
 
 	def _serialize_item(self, item: InventoryItem) -> dict[str, str]:
+		# Always derive quantity from packages × per_package when possible,
+		# so the CSV value is always authoritative and never drifts.
+		if item.number_of_packages is not None:
+			stored_quantity = item.number_of_packages * item.quantity_per_package
+		else:
+			stored_quantity = item.quantity or 0.0
+
 		return {
 			"item_id": str(item.item_id),
 			"item_name": item.item_name,
 			"storage_type": item.storage_type,
 			"shelf_life_type": item.shelf_life_type,
 			"package_type": item.package_type,
-			"quantity": str(item.quantity),
+			"quantity": str(stored_quantity),
 			"quantity_type": item.quantity_type,
+			"quantity_per_package": str(item.quantity_per_package),
 			"batch_based_inventory": item.batch_based_inventory,
 			"expiration_date": item.expiration_date.isoformat(),
 			"supplier_name": item.supplier_name,
