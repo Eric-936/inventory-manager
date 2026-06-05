@@ -1,4 +1,5 @@
 from datetime import date, datetime
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, field_validator, model_validator
 
@@ -145,3 +146,20 @@ class InventoryOverview(BaseModel):
 class InventoryUpsertResponse(BaseModel):
 	operation: str
 	item: InventoryItem
+
+
+class RestockSuggestion(BaseModel):
+	item_id: int
+	item_name: str
+	current_quantity: float
+	quantity_type: str
+	number_of_packages: int | None
+	usage_count_30d: int
+	days_to_expiry: int
+	urgency: Literal["critical", "expiring_soon", "low_stock", "ok"]
+	reason: str
+
+
+class RestockSuggestionsResponse(BaseModel):
+	generated_at: date
+	suggestions: list[RestockSuggestion]
