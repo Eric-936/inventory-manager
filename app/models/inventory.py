@@ -155,7 +155,7 @@ class RestockSuggestion(BaseModel):
 	quantity_type: str
 	number_of_packages: int | None
 	usage_count_30d: int
-	days_to_expiry: int
+	days_to_expiry: int | None
 	urgency: Literal["critical", "expiring_soon", "low_stock", "ok"]
 	reason: str
 

@@ -120,7 +120,13 @@ class InventoryService:
 			expiry_threshold = config["expiry_days"]
 			packages_threshold = config["packages"]
 
-			days_to_expiry = (item.expiration_date - today).days
+			if item.expiration_date is not None:
+				days_to_expiry: int | None = (item.expiration_date - today).days
+				is_expiring = days_to_expiry <= expiry_threshold
+			else:
+				days_to_expiry = None
+				is_expiring = False
+
 			usage_count = withdrawal_counts[item.item_id]
 
 			pkgs = item.number_of_packages
@@ -131,9 +137,9 @@ class InventoryService:
 				and item.quantity_per_package > 0
 				and item.quantity <= packages_threshold * item.quantity_per_package
 			)
-			is_expiring = days_to_expiry <= expiry_threshold
 
 			stock_label = f"{pkgs} package(s)" if pkgs is not None else f"{item.quantity} {item.quantity_type}"
+			expiry_str = f"expires in {days_to_expiry} day(s)" if days_to_expiry is not None else "no expiry date set"
 
 			if is_expiring and is_low_stock:
 				urgency = "critical"
@@ -152,14 +158,12 @@ class InventoryService:
 				urgency = "low_stock"
 				reason = (
 					f"Only {stock_label} remaining (threshold: {packages_threshold} for {item.shelf_life_type}). "
-					f"Expires in {days_to_expiry} day(s). "
+					f"{expiry_str.capitalize()}. "
 					f"Withdrawn {usage_count} time(s) in the last {_OBSERVATION_DAYS} days."
 				)
 			else:
 				urgency = "ok"
-				reason = (
-					f"Stock is adequate ({stock_label}, expires in {days_to_expiry} day(s))."
-				)
+				reason = f"Stock is adequate ({stock_label}, {expiry_str})."
 
 			suggestions.append(RestockSuggestion(
 				item_id=item.item_id,
