@@ -4,12 +4,11 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>{% block title %}Inventory Manager{% endblock %}</title>
-  <link rel="stylesheet" href="/static/css/style.css" />
+  <link rel="stylesheet" href="/static/css/style.css?v={{ asset_version() }}" />
 </head>
 <body>
   <header class="site-header">
     <div class="header-inner">
-      <span class="site-logo">🍽️</span>
       <span class="site-name">Inventory Manager</span>
     </div>
   </header>

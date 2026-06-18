@@ -11,7 +11,7 @@ class InventoryBase(BaseModel):
 	quantity_type: str
 	quantity_per_package: float              # required; drives the quantity calculation
 	batch_based_inventory: str
-	expiration_date: date
+	expiration_date: date | None = None
 	supplier_name: str
 	pricing: float
 	related_dishes: str | None = None
@@ -61,7 +61,7 @@ class InventoryBase(BaseModel):
 					"Provide quantity directly, or set both number_of_packages "
 					"and quantity_per_package so it can be calculated automatically."
 				)
-			self.quantity = self.number_of_packages * self.quantity_per_package
+			self.quantity = round(self.number_of_packages * self.quantity_per_package, 6)
 		return self
 
 

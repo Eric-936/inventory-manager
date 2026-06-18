@@ -3,12 +3,127 @@
 {% block title %}Inventory — Inventory Manager{% endblock %}
 
 {% block content %}
+{# ── Page header ── #}
 <div class="page-header">
   <div>
     <h1 class="page-title">Inventory</h1>
     <p class="page-subtitle">
       <span id="visible-count">{{ items | length }}</span> item{{ 's' if items | length != 1 }}
     </p>
+  </div>
+  <button class="btn-open-modal" id="open-modal-btn" type="button">+ Add item</button>
+</div>
+
+{# ── Add item modal ── #}
+<div id="add-item-overlay" class="modal-overlay" hidden>
+  <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+    <div class="modal-header">
+      <div>
+        <h2 class="modal-title" id="modal-title">Add new item</h2>
+        <p class="modal-subtitle">Required fields only — edit details later</p>
+      </div>
+      <button class="modal-close" type="button" aria-label="Close">×</button>
+    </div>
+
+    <form id="add-item-form" class="modal-form" novalidate>
+      <div class="form-group">
+        <label class="form-label" for="f-item-name">Item name <span class="required">*</span></label>
+        <input class="form-input" id="f-item-name" type="text" name="item_name" required />
+      </div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label" for="f-storage-type">Storage type <span class="required">*</span></label>
+          <select class="form-select" id="f-storage-type" name="storage_type" required>
+            <option value="">Select…</option>
+            <option value="fresh">Fresh</option>
+            <option value="frozen">Frozen</option>
+            <option value="dry">Dry</option>
+            <option value="beverage">Beverage</option>
+            <option value="prepared">Prepared</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="f-shelf-life">Shelf life <span class="required">*</span></label>
+          <select class="form-select" id="f-shelf-life" name="shelf_life_type" required>
+            <option value="">Select…</option>
+            <option value="short_term">Short term</option>
+            <option value="medium_term">Medium term</option>
+            <option value="long_term">Long term</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <p class="stock-section-label">Stock quantity</p>
+        <div class="form-row form-row--3">
+          <div class="form-group">
+            <label class="form-label" for="f-num-packages">No. of packages <span class="required">*</span></label>
+            <input class="form-input" id="f-num-packages" type="number" name="number_of_packages" min="1" required />
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="f-qty-per-pkg">Qty / package <span class="required">*</span></label>
+            <input class="form-input" id="f-qty-per-pkg" type="number" name="quantity_per_package" min="0.01" step="0.1" required />
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="f-unit">Unit <span class="required">*</span></label>
+            <select class="form-select" id="f-unit" name="quantity_type" required>
+              <option value="">—</option>
+              <option value="kg">kg</option>
+              <option value="g">g</option>
+              <option value="litre">litre</option>
+              <option value="ml">ml</option>
+              <option value="bottle">bottle</option>
+              <option value="can">can</option>
+              <option value="pack">pack</option>
+              <option value="piece">piece</option>
+              <option value="jar">jar</option>
+            </select>
+          </div>
+        </div>
+        <div class="total-qty-row">
+          Total quantity: <span id="total-qty-value">—</span>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="f-package-type">Package type</label>
+        <select class="form-select" id="f-package-type" name="package_type">
+          <option value="">Select…</option>
+          <option value="pack">Pack</option>
+          <option value="bottle">Bottle</option>
+          <option value="can">Can</option>
+          <option value="jar">Jar</option>
+          <option value="bag">Bag</option>
+          <option value="piece">Piece</option>
+          <option value="box">Box</option>
+          <option value="no_package">No package</option>
+        </select>
+      </div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label" for="f-expiry">Expiry date</label>
+          <input class="form-input" id="f-expiry" type="date" name="expiration_date" />
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="f-supplier">Supplier <span class="required">*</span></label>
+          <input class="form-input" id="f-supplier" type="text" name="supplier_name" required />
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="f-pricing">Pricing per unit</label>
+        <input class="form-input" id="f-pricing" type="number" name="pricing" min="0" step="0.01" />
+      </div>
+
+      <p id="modal-error" class="modal-error" hidden></p>
+
+      <div class="modal-actions">
+        <button class="btn-cancel" type="button" id="modal-cancel-btn">Cancel</button>
+        <button class="btn-submit" type="submit" id="modal-submit-btn">Add item</button>
+      </div>
+    </form>
   </div>
 </div>
 
@@ -29,58 +144,270 @@
 
 <div class="card-grid" id="card-grid">
   {% for item in items %}
-  <a class="card" href="/item/{{ item.item_id }}" data-name="{{ item.item_name | lower }}">
-    <div class="card-header">
-      <span class="storage-badge">{{ item.storage_type }}</span>
-      {% if item.number_of_packages is not none %}
-      <span class="packages-badge">{{ item.number_of_packages }} pkg</span>
+  <div class="card"
+       data-name="{{ item.item_name | lower }}"
+       data-item-id="{{ item.item_id }}"
+       data-packages="{{ item.number_of_packages if item.number_of_packages is not none else 0 }}"
+       data-package-type="{{ item.package_type or '' }}">
+
+    {%- set _same = item.package_type and item.package_type == item.quantity_type -%}
+    {%- set _pt = item.package_type -%}
+    {%- set _qty_int = item.quantity | int if item.quantity == item.quantity | int else item.quantity -%}
+    {%- set _stock_unit = _pt if _pt and _pt not in ('no_package', 'no package') else item.quantity_type -%}
+
+    <a class="card-link" href="/item/{{ item.item_id }}">
+      {% if item.picture_of_items %}
+      <div class="card-image">
+        <img src="{{ item.picture_of_items }}" alt="{{ item.item_name }}" loading="lazy" />
+      </div>
+      {% else %}
+      <div class="card-image card-image--{{ item.storage_type }}">
+        {{ item.item_name[0] | upper }}
+      </div>
       {% endif %}
-    </div>
 
-    <h2 class="item-name">{{ item.item_name }}</h2>
+      <div class="card-header">
+        <span class="storage-badge">{{ item.supplier_name }}</span>
+        {%- if item.number_of_packages is not none -%}
+        <span class="packages-badge">{{ item.number_of_packages }}&thinsp;{%- if _pt and _pt not in ('no_package', 'no package') %}{%- if _pt == 'box' %}boxes{%- else %}{{ _pt }}s{%- endif %}{%- else %}pkgs{%- endif %}</span>
+        {%- endif -%}
+      </div>
 
-    <div class="quantity-row">
-      <span class="quantity-value">{{ item.quantity | int if item.quantity == item.quantity | int else item.quantity }}</span>
-      <span class="quantity-unit">{{ item.quantity_type }}</span>
-    </div>
+      <h2 class="item-name">{{ item.item_name }}</h2>
 
-    <div class="card-footer">
-      <span class="supplier-label">{{ item.supplier_name }}</span>
-      {% if item.pricing %}
-      <span class="pricing-label">${{ "%.2f" | format(item.pricing) }}</span>
+      {% if _same %}
+      <div class="quantity-row">
+        <span class="quantity-value">{{ _qty_int }}</span>
+        <span class="quantity-unit">
+          {%- if item.quantity_type == 'box' %}boxes{%- else %}{{ item.quantity_type }}s{%- endif -%}
+        </span>
+      </div>
+      {% else %}
+      {%- set _per_pkg_unit = _pt if _pt and _pt not in ('no_package', 'no package') else 'pkg' -%}
+      {%- set _qpp_int = item.quantity_per_package | int if item.quantity_per_package == item.quantity_per_package | int else item.quantity_per_package -%}
+      <div class="quantity-row">
+        <span class="quantity-value">{{ _qty_int }}</span>
+        <span class="quantity-unit">{{ item.quantity_type }}</span>
+        <span class="quantity-per-pkg">({{ _qpp_int }}&thinsp;{{ item.quantity_type }}/{{ _per_pkg_unit }})</span>
+      </div>
       {% endif %}
+    </a>
+
+    <div class="card-stock">
+      <button class="card-btn card-btn--withdraw" type="button" aria-label="Remove stock">−</button>
+      <input class="card-qty-input" type="number" min="1" value="1" aria-label="Amount" />
+      <button class="card-btn card-btn--add" type="button" aria-label="Add stock">+</button>
     </div>
-  </a>
+    <div class="card-stock-msg" aria-live="polite"></div>
+  </div>
   {% endfor %}
 </div>
 
 <script>
-  const input      = document.getElementById('search-input');
-  const cards      = document.querySelectorAll('#card-grid .card');
-  const noResults  = document.getElementById('no-results');
-  const countEl    = document.getElementById('visible-count');
-  const total      = cards.length;
+  /* ── Search ── */
+  const input     = document.getElementById('search-input');
+  const cards     = document.querySelectorAll('#card-grid .card');
+  const noResults = document.getElementById('no-results');
+  const countEl   = document.getElementById('visible-count');
 
   input.addEventListener('input', () => {
     const query = input.value.trim().toLowerCase();
     let visible = 0;
-
     cards.forEach(card => {
       const match = !query || card.dataset.name.includes(query);
       card.style.display = match ? '' : 'none';
       if (match) visible++;
     });
-
     countEl.textContent = visible;
     noResults.hidden = visible > 0;
   });
+
+  /* ── Inline stock control ── */
+  document.getElementById('card-grid').addEventListener('click', e => {
+    const btn = e.target.closest('.card-btn');
+    if (!btn) return;
+    e.preventDefault();
+    adjustStock(btn.closest('.card'), btn.classList.contains('card-btn--add') ? 1 : -1);
+  });
+
+  async function adjustStock(card, delta) {
+    const itemId      = card.dataset.itemId;
+    const currentPkgs = parseInt(card.dataset.packages, 10) || 0;
+    const qtyInput    = card.querySelector('.card-qty-input');
+    const msgEl       = card.querySelector('.card-stock-msg');
+    const amount      = parseInt(qtyInput.value, 10);
+
+    if (!amount || amount < 1) return;
+
+    const newPkgs = currentPkgs + delta * amount;
+    if (newPkgs < 0) { showMsg(msgEl, 'Not enough stock', 'error'); return; }
+
+    const buttons = card.querySelectorAll('.card-btn');
+    buttons.forEach(b => b.disabled = true);
+
+    try {
+      const res = await fetch(`/api/inventory/${itemId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ number_of_packages: newPkgs }),
+      });
+      if (!res.ok) throw new Error();
+      const data = await res.json();
+
+      card.dataset.packages = newPkgs;
+
+      const qtyEl = card.querySelector('.quantity-value');
+      if (qtyEl && data.quantity != null) {
+        const q = Math.round(data.quantity * 1e6) / 1e6;
+        qtyEl.textContent = q === Math.floor(q) ? Math.floor(q) : q;
+      }
+      const badge = card.querySelector('.packages-badge');
+      if (badge) {
+        const pt = card.dataset.packageType;
+        const label = (!pt || pt === 'no_package' || pt === 'no package')
+          ? 'pkgs'
+          : pt === 'box' ? 'boxes' : `${pt}s`;
+        badge.textContent = `${newPkgs} ${label}`;
+      }
+
+      showMsg(msgEl, delta > 0 ? `+${amount} added` : `−${amount} removed`, 'ok');
+    } catch {
+      showMsg(msgEl, 'Update failed', 'error');
+    } finally {
+      buttons.forEach(b => b.disabled = false);
+    }
+  }
+
+  function showMsg(el, text, type) {
+    el.textContent = text;
+    el.className = `card-stock-msg card-stock-msg--${type}`;
+    clearTimeout(el._timer);
+    el._timer = setTimeout(() => { el.textContent = ''; el.className = 'card-stock-msg'; }, 2500);
+  }
 </script>
 
 {% else %}
 <div class="empty-state">
   <span class="empty-icon">📦</span>
   <p>No inventory items yet.</p>
-  <p class="empty-hint">Add items via the API to get started.</p>
+  <p class="empty-hint">Click "+ Add item" to get started.</p>
 </div>
 {% endif %}
+
+{# ── Modal JS (always present) ── #}
+<script>
+  const overlay    = document.getElementById('add-item-overlay');
+  const addForm    = document.getElementById('add-item-form');
+  const modalError = document.getElementById('modal-error');
+  const submitBtn  = document.getElementById('modal-submit-btn');
+  const totalQtyEl = document.getElementById('total-qty-value');
+  const pkgInput   = document.getElementById('f-num-packages');
+  const qppInput   = document.getElementById('f-qty-per-pkg');
+  const unitSelect = document.getElementById('f-unit');
+
+  function openModal() {
+    overlay.hidden = false;
+    document.body.style.overflow = 'hidden';
+    document.getElementById('f-item-name').focus();
+  }
+
+  function closeModal() {
+    overlay.hidden = true;
+    document.body.style.overflow = '';
+    addForm.reset();
+    totalQtyEl.textContent = '—';
+    modalError.hidden = true;
+  }
+
+  document.getElementById('open-modal-btn').addEventListener('click', openModal);
+  overlay.querySelector('.modal-close').addEventListener('click', closeModal);
+  document.getElementById('modal-cancel-btn').addEventListener('click', closeModal);
+  overlay.addEventListener('click', e => { if (e.target === overlay) closeModal(); });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape' && !overlay.hidden) closeModal(); });
+
+  function updateTotal() {
+    const pkgs   = parseFloat(pkgInput.value);
+    const qpp    = parseFloat(qppInput.value);
+    const unit   = unitSelect.value;
+    if (pkgs > 0 && qpp > 0) {
+      const total = Math.round(pkgs * qpp * 1e6) / 1e6;
+      totalQtyEl.textContent = `${total} ${unit || '—'}`;
+    } else {
+      totalQtyEl.textContent = '—';
+    }
+  }
+
+  pkgInput.addEventListener('input', updateTotal);
+  qppInput.addEventListener('input', updateTotal);
+  unitSelect.addEventListener('change', updateTotal);
+
+  addForm.addEventListener('submit', async e => {
+    e.preventDefault();
+    modalError.hidden = true;
+
+    const fd          = new FormData(addForm);
+    const itemName    = fd.get('item_name').trim();
+    const storageType = fd.get('storage_type');
+    const shelfLife   = fd.get('shelf_life_type');
+    const numPkgs     = parseInt(fd.get('number_of_packages'), 10);
+    const qtyPerPkg   = parseFloat(fd.get('quantity_per_package'));
+    const unit        = fd.get('quantity_type');
+    const supplier    = fd.get('supplier_name').trim();
+
+    if (!itemName || !storageType || !shelfLife || !numPkgs || !qtyPerPkg || !unit || !supplier) {
+      showModalError('Please fill in all required fields.');
+      return;
+    }
+
+    const payload = {
+      item_name:            itemName,
+      storage_type:         storageType,
+      shelf_life_type:      shelfLife,
+      number_of_packages:   numPkgs,
+      quantity_per_package: qtyPerPkg,
+      quantity_type:        unit,
+      quantity:             Math.round(numPkgs * qtyPerPkg * 1e6) / 1e6,
+      supplier_name:        supplier,
+      package_type:         fd.get('package_type') || 'pack',
+      batch_based_inventory: 'N/A',
+      pricing:              0,
+    };
+
+    const expiryDate = fd.get('expiration_date');
+    if (expiryDate) payload.expiration_date = expiryDate;
+
+    const pricing = parseFloat(fd.get('pricing'));
+    if (!isNaN(pricing)) payload.pricing = pricing;
+
+    submitBtn.disabled    = true;
+    submitBtn.textContent = 'Adding…';
+
+    try {
+      const res = await fetch('/api/inventory', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify(payload),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        const detail = err.detail;
+        showModalError(Array.isArray(detail) ? detail.map(d => d.msg).join(', ') : (detail || 'Failed to add item.'));
+        return;
+      }
+      closeModal();
+      location.reload();
+    } catch {
+      showModalError('Network error. Please try again.');
+    } finally {
+      submitBtn.disabled    = false;
+      submitBtn.textContent = 'Add item';
+    }
+  });
+
+  function showModalError(msg) {
+    modalError.textContent = msg;
+    modalError.hidden = false;
+  }
+</script>
+
 {% endblock %}

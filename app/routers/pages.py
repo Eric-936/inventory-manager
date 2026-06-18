@@ -10,7 +10,13 @@ from app.services.inventory_service import InventoryService, ItemNotFoundError
 
 
 TEMPLATES_DIR = Path(__file__).resolve().parent.parent / "templates"
+STYLE_CSS_PATH = Path(__file__).resolve().parent.parent / "static" / "css" / "style.css"
+
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
+# Cache-bust the stylesheet URL with its mtime so browsers always fetch the
+# latest CSS instead of serving a stale cached copy (no Cache-Control header
+# is set on /static, so browsers fall back to long heuristic caching).
+templates.env.globals["asset_version"] = lambda: int(STYLE_CSS_PATH.stat().st_mtime)
 
 router = APIRouter(tags=["pages"])
 
