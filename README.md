@@ -15,6 +15,7 @@ It supports these inventory workflows:
 - Create a new item if it does not exist yet
 - Update a specific item by `item_id`
 - Delete a specific item by `item_id`
+- Get restocking suggestions for all items based on current stock and expiration date
 
 ## CSV File Location
 
@@ -43,14 +44,15 @@ Expected columns:
 - `shelf_life_type`
 - `package_type`
 - `quantity`
-- `quantity_unit`
-- `batch_number`
+- `quantity_type`
+- `quantity_per_package`
+- `batch_based_inventory`
 - `expiration_date`
 - `supplier_name`
-- `price_per_unit`
-- `reorder_threshold`
+- `pricing`
 - `related_dishes`
-- `picture_url`
+- `picture_of_items`
+- `number_of_packages`
 
 ### `transactions_table.csv`
 
@@ -62,9 +64,7 @@ Expected columns:
 - `item_id`
 - `action_type`
 - `action_detail`
-- `quantity_changed`
 - `date_of_action`
-- `staff_name`
 - `comments`
 
 ## Run The API Locally
@@ -78,13 +78,11 @@ python -m venv .venv
 source .venv/bin/activate
 ```
 
-Install the project from `pyproject.toml`:
+Install the project and its dependencies:
 
 ```bash
 pip install -e .
 ```
-
-This installs the runtime dependencies listed in [pyproject.toml](/Users/ericzhao/Cosmos/inventory-manager/pyproject.toml).
 
 If you want to run tests locally, install the test dependencies too:
 
@@ -92,9 +90,7 @@ If you want to run tests locally, install the test dependencies too:
 pip install pytest httpx
 ```
 
-If you want to run the FastAPI server locally, use `uvicorn`.
-
-Example:
+If you want to run the FastAPI server locally, use `uvicorn`:
 
 ```bash
 python -m uvicorn app.main:app --reload
@@ -130,14 +126,15 @@ Response shape:
 			"shelf_life_type": "short_term",
 			"package_type": "pack",
 			"quantity": 15.5,
-			"quantity_unit": "kg",
-			"batch_number": "BATCH-2025-001",
+			"quantity_type": "kg",
+			"quantity_per_package": 1.55,
+			"batch_based_inventory": "BATCH-2025-001",
 			"expiration_date": "2025-05-24",
 			"supplier_name": "Fresh Farm Co.",
-			"price_per_unit": 12.5,
-			"reorder_threshold": 5.0,
+			"pricing": 12.5,
 			"related_dishes": "Pho Bo / Bun Bo",
-			"picture_url": null
+			"picture_of_items": null,
+			"number_of_packages": 10
 		}
 	],
 	"transactions": [
@@ -146,9 +143,7 @@ Response shape:
 			"item_id": 1,
 			"action_type": "add",
 			"action_detail": "purchase",
-			"quantity_changed": 20.0,
 			"date_of_action": "2025-05-20T08:00:00",
-			"staff_name": "Minh",
 			"comments": "Initial stock for opening"
 		}
 	]
@@ -170,18 +165,22 @@ Required request fields:
 - `storage_type`
 - `shelf_life_type`
 - `package_type`
-- `quantity`
-- `quantity_unit`
-- `batch_number`
+- `quantity_type`
+- `quantity_per_package`
+- `batch_based_inventory`
 - `expiration_date`
 - `supplier_name`
-- `price_per_unit`
-- `reorder_threshold`
+- `pricing`
+
+At least one of the following is required to establish the quantity:
+
+- `number_of_packages` — quantity is computed automatically as `number_of_packages × quantity_per_package`
+- `quantity` — set directly if packages are not applicable
 
 Optional request fields:
 
 - `related_dishes`
-- `picture_url`
+- `picture_of_items`
 
 Example request:
 
@@ -191,15 +190,14 @@ Example request:
 	"storage_type": "fresh",
 	"shelf_life_type": "short_term",
 	"package_type": "pack",
-	"quantity": 2.5,
-	"quantity_unit": "kg",
-	"batch_number": "BATCH-2026-010",
+	"quantity_type": "kg",
+	"quantity_per_package": 1.25,
+	"number_of_packages": 2,
+	"batch_based_inventory": "BATCH-2026-010",
 	"expiration_date": "2026-06-01",
 	"supplier_name": "Fresh Farm Co.",
-	"price_per_unit": 8.5,
-	"reorder_threshold": 4.0,
-	"related_dishes": "Pho Ga",
-	"picture_url": "https://example.com/chicken.jpg"
+	"pricing": 8.5,
+	"related_dishes": "Pho Ga"
 }
 ```
 
@@ -215,14 +213,15 @@ Example response:
 		"shelf_life_type": "short_term",
 		"package_type": "pack",
 		"quantity": 12.5,
-		"quantity_unit": "kg",
-		"batch_number": "BATCH-2025-002",
+		"quantity_type": "kg",
+		"quantity_per_package": 1.25,
+		"batch_based_inventory": "BATCH-2025-002",
 		"expiration_date": "2025-05-23",
 		"supplier_name": "Fresh Farm Co.",
-		"price_per_unit": 8.0,
-		"reorder_threshold": 4.0,
+		"pricing": 8.0,
 		"related_dishes": "Pho Ga / Com Ga",
-		"picture_url": null
+		"picture_of_items": null,
+		"number_of_packages": 10
 	}
 }
 ```
@@ -238,8 +237,7 @@ Example request:
 ```json
 {
 	"supplier_name": "Updated Supplier",
-	"quantity": 12.0,
-	"reorder_threshold": 3.0
+	"number_of_packages": 8
 }
 ```
 
@@ -252,15 +250,16 @@ Example response:
 	"storage_type": "fresh",
 	"shelf_life_type": "short_term",
 	"package_type": "pack",
-	"quantity": 12.0,
-	"quantity_unit": "kg",
-	"batch_number": "BATCH-2025-001",
+	"quantity": 12.4,
+	"quantity_type": "kg",
+	"quantity_per_package": 1.55,
+	"batch_based_inventory": "BATCH-2025-001",
 	"expiration_date": "2025-05-24",
 	"supplier_name": "Updated Supplier",
-	"price_per_unit": 12.5,
-	"reorder_threshold": 3.0,
+	"pricing": 12.5,
 	"related_dishes": "Pho Bo / Bun Bo",
-	"picture_url": null
+	"picture_of_items": null,
+	"number_of_packages": 8
 }
 ```
 
@@ -272,26 +271,89 @@ Response:
 
 - HTTP `204 No Content` on success
 
+### `GET /api/inventory/restock-suggestions`
+
+Scans all inventory items and returns a prioritised list of restocking suggestions.
+
+No request parameters required.
+
+Response shape:
+
+```json
+{
+	"generated_at": "2026-05-30",
+	"suggestions": [
+		{
+			"item_id": 1,
+			"item_name": "Beef (sliced)",
+			"current_quantity": 4.65,
+			"quantity_type": "kg",
+			"number_of_packages": 3,
+			"usage_count_30d": 5,
+			"days_to_expiry": 2,
+			"urgency": "critical",
+			"reason": "Only 3 package(s) remaining and expires in 2 day(s). Withdrawn 5 time(s) in the last 30 days."
+		}
+	]
+}
+```
+
+#### Response fields
+
+| Field | Type | Description |
+|---|---|---|
+| `generated_at` | date | The date this response was produced |
+| `item_id` | int | Item identifier |
+| `item_name` | string | Item name |
+| `current_quantity` | float | Current stock quantity |
+| `quantity_type` | string | Unit of measurement (e.g. `kg`, `bottle`) |
+| `number_of_packages` | int \| null | Number of packages currently in stock |
+| `usage_count_30d` | int | Number of `withdraw` transactions recorded in the last 30 days |
+| `days_to_expiry` | int | Days until `expiration_date`; negative means already expired |
+| `urgency` | string | One of `critical`, `expiring_soon`, `low_stock`, `ok` |
+| `reason` | string | Human-readable explanation of the urgency level |
+
+Results are sorted by urgency: `critical` first, then `expiring_soon`, then `low_stock`, then `ok`.
+
+#### How urgency is determined
+
+Each `shelf_life_type` has two thresholds:
+
+| `shelf_life_type` | Expiry threshold (days) | Low-stock threshold (packages) |
+|---|---|---|
+| `short_term` | 3 | 3 |
+| `medium_term` | 7 | 5 |
+| `long_term` | 14 | 2 |
+
+The urgency level is assigned as follows:
+
+- **`critical`** — both conditions are true: stock is at or below the package threshold AND the item expires within the expiry threshold. Order immediately.
+- **`expiring_soon`** — item expires within the threshold but stock is still adequate. Monitor or plan ahead.
+- **`low_stock`** — stock is at or below the threshold but expiry is not imminent. Plan a restock.
+- **`ok`** — neither condition is triggered.
+
 ## Validation Rules
 
-Validation is defined in [app/models/inventory.py](/Users/ericzhao/Cosmos/inventory-manager/app/models/inventory.py).
+Validation is defined in [app/models/inventory.py](app/models/inventory.py).
 
 Important frontend-facing rules:
 
-- Required string fields must not be missing
-- Required string fields must not be empty strings
-- `quantity`, `price_per_unit`, and `reorder_threshold` must be non-negative
-- `expiration_date` should be sent as `YYYY-MM-DD`
+- Required string fields must not be missing or empty
+- `quantity`, `quantity_per_package`, and `pricing` must be non-negative
+- `expiration_date` must be sent as `YYYY-MM-DD`
+- `quantity` is computed automatically from `number_of_packages × quantity_per_package`; you must provide either `number_of_packages` or a direct `quantity` value
 
 If the payload fails validation, FastAPI returns HTTP `422`.
 
 ## Notes For Frontend Integration
 
 - Use `GET /api/inventory` if your page needs both the inventory list and the transaction history in one request
+- Use `GET /api/inventory/restock-suggestions` to drive a restocking dashboard or alert banner
 - Use `POST /api/inventory` for stock-in behavior
 - Use `PUT /api/inventory/{item_id}` for editing a single item form
 - Use `DELETE /api/inventory/{item_id}` for remove actions
 - The current matching rule for the add endpoint is based on `item_name`
+- `usage_count_30d` in the suggestions response reflects raw withdrawal event count, not quantity consumed — one transaction equals one count
 
 ## Tests
 

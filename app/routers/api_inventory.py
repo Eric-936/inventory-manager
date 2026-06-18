@@ -7,6 +7,7 @@ from app.models.inventory import (
 	InventoryItem,
 	InventoryUpdate,
 	InventoryUpsertResponse,
+	RestockSuggestionsResponse,
 )
 from app.repositories.inventory_repo import InventoryRepository
 from app.services.inventory_service import InventoryService, ItemNotFoundError
@@ -21,6 +22,13 @@ def get_inventory_service() -> InventoryService:
 		transactions_path=TRANSACTIONS_CSV_PATH,
 	)
 	return InventoryService(repository)
+
+
+@router.get("/restock-suggestions", response_model=RestockSuggestionsResponse)
+def get_restock_suggestions(
+	service: InventoryService = Depends(get_inventory_service),
+) -> RestockSuggestionsResponse:
+	return service.get_restock_suggestions()
 
 
 @router.get("", response_model=InventoryOverview)
