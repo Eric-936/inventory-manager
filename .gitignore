@@ -6,6 +6,12 @@ data/
 # Ignore AI assistant guides
 guide/
 
+# Ignore Claude Code session files
+.claude/
+
+# Ignore local static assets (images, uploads)
+app/static/images/
+
 # Ignore MacOS system files
 .DS_Store
 

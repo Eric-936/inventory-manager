@@ -29,17 +29,29 @@ def get_inventory_service() -> InventoryService:
     return InventoryService(repository)
 
 
+_URGENCY_RANK = {"critical": 0, "expiring_soon": 1, "low_stock": 2, "ok": 3}
+
+
 @router.get("/", response_class=HTMLResponse)
 def index(
     request: Request,
     service: InventoryService = Depends(get_inventory_service),
 ) -> HTMLResponse:
     overview = service.get_inventory_overview()
+    restock_data = service.get_restock_suggestions()
+    suggestions = {s.item_id: s for s in restock_data.suggestions}
+    sorted_items = sorted(
+        overview.items,
+        key=lambda i: _URGENCY_RANK.get(
+            suggestions[i.item_id].urgency if i.item_id in suggestions else "ok", 3
+        ),
+    )
     return templates.TemplateResponse(
         request,
         "index.html",
         {
-            "items": overview.items,
+            "items": sorted_items,
+            "suggestions": suggestions,
         },
     )
 
