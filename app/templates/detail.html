@@ -10,25 +10,6 @@
   <h1 class="page-title">{{ item.item_name }}</h1>
 </div>
 
-{# ── Stock control ── #}
-<section class="stock-control">
-  <h2 class="section-title">Adjust Stock</h2>
-  <div class="stock-row">
-    <input
-      id="qty-input"
-      class="qty-input"
-      type="number"
-      min="0"
-      step="any"
-      placeholder="Amount"
-      aria-label="Amount to add or withdraw"
-    />
-    <button class="btn btn-add" onclick="adjustStock(1)">+ Add</button>
-    <button class="btn btn-withdraw" onclick="adjustStock(-1)">− Withdraw</button>
-  </div>
-  <p id="stock-msg" class="stock-msg" hidden></p>
-</section>
-
 {# ── Item details ── #}
 <section class="detail-section">
   <h2 class="section-title">Item Details</h2>
@@ -67,10 +48,6 @@
     <div class="detail-row">
       <dt class="detail-label">Batch</dt>
       <dd class="detail-value">{{ item.batch_based_inventory }}</dd>
-    </div>
-    <div class="detail-row">
-      <dt class="detail-label">Expiry date</dt>
-      <dd class="detail-value">{{ item.expiration_date }}</dd>
     </div>
     <div class="detail-row">
       <dt class="detail-label">Supplier</dt>
@@ -122,48 +99,5 @@
   {% endif %}
 </section>
 
-<script>
-  let currentQty = {{ item.quantity }};
-  const itemId   = {{ item.item_id }};
-  const msgEl    = document.getElementById('stock-msg');
-
-  function showMsg(text, isError) {
-    msgEl.textContent = text;
-    msgEl.className   = 'stock-msg ' + (isError ? 'stock-msg--error' : 'stock-msg--ok');
-    msgEl.hidden      = false;
-  }
-
-  async function adjustStock(direction) {
-    const input  = document.getElementById('qty-input');
-    const amount = parseFloat(input.value);
-
-    if (!input.value || isNaN(amount) || amount <= 0) {
-      showMsg('Please enter a valid amount greater than zero.', true);
-      return;
-    }
-
-    const newQty = currentQty + direction * amount;
-    if (newQty < 0) {
-      showMsg('Quantity cannot go below zero.', true);
-      return;
-    }
-
-    try {
-      const res = await fetch(`/api/inventory/${itemId}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ quantity: newQty }),
-      });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        showMsg(err.detail || 'Update failed. Please try again.', true);
-        return;
-      }
-      location.reload();
-    } catch {
-      showMsg('Network error. Please try again.', true);
-    }
-  }
-</script>
 
 {% endblock %}

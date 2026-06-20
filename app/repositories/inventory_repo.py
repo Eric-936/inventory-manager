@@ -89,7 +89,7 @@ class InventoryRepository:
 			packages = merged.get("number_of_packages")
 			qty_per_pkg = merged.get("quantity_per_package")
 			if packages is not None and qty_per_pkg is not None:
-				merged["quantity"] = packages * qty_per_pkg
+				merged["quantity"] = round(packages * qty_per_pkg, 6)
 
 			updated_item = InventoryItem.model_validate(merged)
 			rows[index] = self._serialize_item(updated_item)
@@ -187,7 +187,7 @@ class InventoryRepository:
 			quantity_type=row["quantity_type"],
 			quantity_per_package=quantity_per_package,
 			batch_based_inventory=row["batch_based_inventory"],
-			expiration_date=row["expiration_date"],
+			expiration_date=row["expiration_date"] or None,
 			supplier_name=row["supplier_name"],
 			pricing=float(raw_pricing) if raw_pricing else 0.0,
 			related_dishes=row.get("related_dishes") or None,
@@ -199,7 +199,7 @@ class InventoryRepository:
 		# Always derive quantity from packages × per_package when possible,
 		# so the CSV value is always authoritative and never drifts.
 		if item.number_of_packages is not None:
-			stored_quantity = item.number_of_packages * item.quantity_per_package
+			stored_quantity = round(item.number_of_packages * item.quantity_per_package, 6)
 		else:
 			stored_quantity = item.quantity or 0.0
 
@@ -213,7 +213,7 @@ class InventoryRepository:
 			"quantity_type": item.quantity_type,
 			"quantity_per_package": str(item.quantity_per_package),
 			"batch_based_inventory": item.batch_based_inventory,
-			"expiration_date": item.expiration_date.isoformat(),
+			"expiration_date": item.expiration_date.isoformat() if item.expiration_date else "",
 			"supplier_name": item.supplier_name,
 			"pricing": str(item.pricing),
 			"related_dishes": item.related_dishes or "",
