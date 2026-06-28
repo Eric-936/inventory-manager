@@ -54,10 +54,11 @@ def add_or_create_inventory_item(
 def update_inventory_item(
 	item_id: int,
 	payload: InventoryUpdate,
+	comment: str | None = None,
 	service: InventoryService = Depends(get_inventory_service),
 ) -> InventoryItem:
 	try:
-		return service.update_item(item_id, payload)
+		return service.update_item(item_id, payload, comment=comment)
 	except ItemNotFoundError as error:
 		raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(error)) from error
 
