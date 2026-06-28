@@ -1,4 +1,4 @@
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
 from app.models.inventory import InventoryCreate, InventoryUpdate
@@ -139,22 +139,42 @@ def _make_item_row(
 	}
 
 
-def _build_restock_service(tmp_path: Path, items: list[dict[str, str]]) -> InventoryService:
+def _build_restock_service(
+	tmp_path: Path,
+	items: list[dict[str, str]],
+	transactions: list[dict[str, str]] | None = None,
+) -> InventoryService:
 	items_path = tmp_path / "items.csv"
 	transactions_path = tmp_path / "transactions.csv"
 	_write_csv(items_path, ITEM_FIELDNAMES, items)
-	_write_csv(transactions_path, TRANSACTION_FIELDNAMES, [])
+	_write_csv(transactions_path, TRANSACTION_FIELDNAMES, transactions or [])
 	repository = InventoryRepository(items_path=items_path, transactions_path=transactions_path)
 	return InventoryService(repository)
 
 
+def _make_withdraw_rows(item_id: int, count: int, start_id: int = 1) -> list[dict[str, str]]:
+	"""Return `count` withdraw transaction rows dated yesterday (within the 7-day window)."""
+	recent = (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%d %H:%M:%S")
+	return [
+		{
+			"action_id": str(start_id + i),
+			"item_id": str(item_id),
+			"action_type": "withdraw",
+			"action_detail": "usage",
+			"date_of_action": recent,
+			"comments": "test usage",
+		}
+		for i in range(count)
+	]
+
+
 def test_restock_suggestions_critical(tmp_path: Path) -> None:
-	# short_term threshold: expiry_days=3, packages=3
-	# item expires in 2 days AND has only 2 packages → critical
+	# item expires in 2 days AND stock (2 packages) is below 7-day withdrawal count (3) → critical
 	expiring_soon = (date.today() + timedelta(days=2)).isoformat()
 	service = _build_restock_service(
 		tmp_path,
 		[_make_item_row(1, "Bean sprouts", "short_term", expiring_soon, number_of_packages=2)],
+		transactions=_make_withdraw_rows(1, 3),
 	)
 
 	result = service.get_restock_suggestions()
@@ -180,11 +200,12 @@ def test_restock_suggestions_expiring_soon(tmp_path: Path) -> None:
 
 
 def test_restock_suggestions_low_stock(tmp_path: Path) -> None:
-	# expires in 30 days (well outside 3-day threshold) but only 2 packages → low_stock
+	# 2 packages but 3 withdrawals in the last 7 days → low_stock (not expiring)
 	not_expiring = (date.today() + timedelta(days=30)).isoformat()
 	service = _build_restock_service(
 		tmp_path,
 		[_make_item_row(1, "Spring onion", "short_term", not_expiring, number_of_packages=2)],
+		transactions=_make_withdraw_rows(1, 3),
 	)
 
 	result = service.get_restock_suggestions()
@@ -214,7 +235,9 @@ def test_restock_suggestions_sorted_by_urgency(tmp_path: Path) -> None:
 		_make_item_row(3, "Expiring soon item", "short_term", (today + timedelta(days=2)).isoformat(),  number_of_packages=10),
 		_make_item_row(4, "Critical item",      "short_term", (today + timedelta(days=2)).isoformat(),  number_of_packages=2),
 	]
-	service = _build_restock_service(tmp_path, items)
+	# items 2 and 4 need 3 withdrawals in the last 7 days to trigger low_stock
+	transactions = _make_withdraw_rows(2, 3, start_id=1) + _make_withdraw_rows(4, 3, start_id=4)
+	service = _build_restock_service(tmp_path, items, transactions=transactions)
 
 	result = service.get_restock_suggestions()
 

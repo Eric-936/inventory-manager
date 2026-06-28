@@ -16,12 +16,13 @@ from app.repositories.inventory_repo import InventoryRepository
 # expiry_days: flag the item when it expires within this many days.
 # packages: flag the item when number_of_packages is at or below this threshold.
 _SHELF_LIFE_CONFIG: dict[str, dict[str, int]] = {
-	"short_term":  {"expiry_days": 3,  "packages": 3},
-	"medium_term": {"expiry_days": 7,  "packages": 5},
-	"long_term":   {"expiry_days": 14, "packages": 2},
+	"short_term":  {"expiry_days": 3},
+	"medium_term": {"expiry_days": 7},
+	"long_term":   {"expiry_days": 14},
 }
-_DEFAULT_SHELF_LIFE_CONFIG: dict[str, int] = {"expiry_days": 7, "packages": 3}
+_DEFAULT_SHELF_LIFE_CONFIG: dict[str, int] = {"expiry_days": 7}
 _OBSERVATION_DAYS = 30
+_LOW_STOCK_DAYS = 7
 
 
 class ItemNotFoundError(Exception):
@@ -101,24 +102,28 @@ class InventoryService:
 
 		today = date.today()
 		cutoff = datetime.now() - timedelta(days=_OBSERVATION_DAYS)
+		cutoff_7d = datetime.now() - timedelta(days=_LOW_STOCK_DAYS)
 
 		items = self.repository.list_items()
 		transactions = self.repository.list_transactions()
 
-		# Count withdrawal events per item within the observation window.
+		# Count withdrawal events per item within each observation window.
 		withdrawal_counts: dict[int, int] = defaultdict(int)
+		withdrawal_counts_7d: dict[int, int] = defaultdict(int)
 		for t in transactions:
 			if t.action_type != "withdraw":
 				continue
 			# Strip timezone so naive and aware datetimes compare cleanly.
-			if t.date_of_action.replace(tzinfo=None) >= cutoff:
+			action_dt = t.date_of_action.replace(tzinfo=None)
+			if action_dt >= cutoff:
 				withdrawal_counts[t.item_id] += 1
+			if action_dt >= cutoff_7d:
+				withdrawal_counts_7d[t.item_id] += 1
 
 		suggestions: list[RestockSuggestion] = []
 		for item in items:
 			config = _SHELF_LIFE_CONFIG.get(item.shelf_life_type, _DEFAULT_SHELF_LIFE_CONFIG)
 			expiry_threshold = config["expiry_days"]
-			packages_threshold = config["packages"]
 
 			if item.expiration_date is not None:
 				days_to_expiry: int | None = (item.expiration_date - today).days
@@ -128,14 +133,15 @@ class InventoryService:
 				is_expiring = False
 
 			usage_count = withdrawal_counts[item.item_id]
+			weekly_count = withdrawal_counts_7d[item.item_id]
 
 			pkgs = item.number_of_packages
 			is_low_stock = (
-				pkgs is not None and pkgs <= packages_threshold
+				pkgs is not None and pkgs < weekly_count
 			) or (
 				pkgs is None
 				and item.quantity_per_package > 0
-				and item.quantity <= packages_threshold * item.quantity_per_package
+				and item.quantity < weekly_count * item.quantity_per_package
 			)
 
 			stock_label = f"{pkgs} package(s)" if pkgs is not None else f"{item.quantity} {item.quantity_type}"
@@ -144,8 +150,8 @@ class InventoryService:
 			if is_expiring and is_low_stock:
 				urgency = "critical"
 				reason = (
-					f"Only {stock_label} remaining and expires in {days_to_expiry} day(s). "
-					f"Withdrawn {usage_count} time(s) in the last {_OBSERVATION_DAYS} days."
+					f"Only {stock_label} remaining but withdrawn {weekly_count} time(s) in the last {_LOW_STOCK_DAYS} days; "
+					f"expires in {days_to_expiry} day(s)."
 				)
 			elif is_expiring:
 				urgency = "expiring_soon"
@@ -157,9 +163,8 @@ class InventoryService:
 			elif is_low_stock:
 				urgency = "low_stock"
 				reason = (
-					f"Only {stock_label} remaining (threshold: {packages_threshold} for {item.shelf_life_type}). "
-					f"{expiry_str.capitalize()}. "
-					f"Withdrawn {usage_count} time(s) in the last {_OBSERVATION_DAYS} days."
+					f"Only {stock_label} remaining but withdrawn {weekly_count} time(s) in the last {_LOW_STOCK_DAYS} days "
+					f"({expiry_str})."
 				)
 			else:
 				urgency = "ok"
