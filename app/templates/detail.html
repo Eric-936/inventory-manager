@@ -28,7 +28,7 @@
     </div>
     <div class="detail-row">
       <dt class="detail-label">Number of packages</dt>
-      <dd class="detail-value">{{ item.number_of_packages if item.number_of_packages is not none else '—' }}</dd>
+      <dd class="detail-value" id="pkg-display">{{ item.number_of_packages if item.number_of_packages is not none else '—' }}</dd>
     </div>
     <div class="detail-row">
       <dt class="detail-label">Quantity per package</dt>
@@ -68,6 +68,20 @@
   </dl>
 </section>
 
+{# ── Stock control ── #}
+<section class="detail-section"
+         data-item-id="{{ item.item_id }}"
+         data-packages="{{ item.number_of_packages if item.number_of_packages is not none else 0 }}"
+         id="stock-control">
+  <h2 class="section-title">Adjust Stock</h2>
+  <div class="stock-row">
+    <input class="qty-input" id="adj-amount" type="number" min="1" value="1" placeholder="Qty" />
+    <button class="btn btn-add" type="button" id="btn-add">+ Add</button>
+    <button class="btn btn-withdraw" type="button" id="btn-withdraw">− Withdraw</button>
+  </div>
+  <div class="stock-msg" id="stock-msg" aria-live="polite"></div>
+</section>
+
 {# ── Transaction history ── #}
 <section class="detail-section">
   <h2 class="section-title">Transaction History</h2>
@@ -99,5 +113,61 @@
   {% endif %}
 </section>
 
+<script>
+  const section   = document.getElementById('stock-control');
+  const itemId    = section.dataset.itemId;
+  const amountEl  = document.getElementById('adj-amount');
+  const msgEl     = document.getElementById('stock-msg');
+  let currentPkgs = parseInt(section.dataset.packages, 10) || 0;
+
+  document.getElementById('btn-add').addEventListener('click', () => adjustStock(1));
+  document.getElementById('btn-withdraw').addEventListener('click', () => adjustStock(-1));
+
+  async function adjustStock(delta) {
+    const amount = parseInt(amountEl.value, 10);
+    if (!amount || amount < 1) return;
+
+    const newPkgs = currentPkgs + delta * amount;
+    if (newPkgs < 0) { showMsg('Not enough stock', 'error'); return; }
+
+    const buttons = section.querySelectorAll('.btn');
+    buttons.forEach(b => b.disabled = true);
+
+    try {
+      const res = await fetch(`/api/inventory/${itemId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ number_of_packages: newPkgs }),
+      });
+      if (!res.ok) throw new Error();
+      const data = await res.json();
+
+      currentPkgs = newPkgs;
+
+      const pkgDisplay = document.getElementById('pkg-display');
+      if (pkgDisplay) pkgDisplay.textContent = newPkgs;
+
+      const qtyDisplay = document.getElementById('current-qty-display');
+      if (qtyDisplay && data.quantity != null) {
+        const q = Math.round(data.quantity * 1e6) / 1e6;
+        const qStr = q === Math.floor(q) ? Math.floor(q) : q;
+        qtyDisplay.textContent = `${qStr} {{ item.quantity_type }}`;
+      }
+
+      showMsg(delta > 0 ? `+${amount} package(s) added` : `−${amount} package(s) removed`, 'ok');
+    } catch {
+      showMsg('Update failed', 'error');
+    } finally {
+      buttons.forEach(b => b.disabled = false);
+    }
+  }
+
+  function showMsg(text, type) {
+    msgEl.textContent = text;
+    msgEl.className = `stock-msg stock-msg--${type}`;
+    clearTimeout(msgEl._timer);
+    msgEl._timer = setTimeout(() => { msgEl.textContent = ''; msgEl.className = 'stock-msg'; }, 2500);
+  }
+</script>
 
 {% endblock %}
