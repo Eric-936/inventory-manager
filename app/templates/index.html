@@ -198,11 +198,11 @@
       </div>
       {%- endif -%}
       {% if item.picture_of_items %}
-      <div class="card-image"{% if _urgency != 'ok' %} style="margin-top: 0"{% endif %}>
+      <div class="card-image"{% if _urgency != 'ok' %} style="margin-top: -.625rem"{% endif %}>
         <img src="{{ item.picture_of_items }}" alt="{{ item.item_name }}" loading="lazy" />
       </div>
       {% else %}
-      <div class="card-image card-image--{{ item.storage_type }}"{% if _urgency != 'ok' %} style="margin-top: 0"{% endif %}>
+      <div class="card-image card-image--{{ item.storage_type }}"{% if _urgency != 'ok' %} style="margin-top: -.625rem"{% endif %}>
         {{ item.item_name[0] | upper }}
       </div>
       {% endif %}
@@ -237,12 +237,6 @@
       {%- endif -%}
     </a>
 
-    <div class="card-stock">
-      <button class="card-btn card-btn--withdraw" type="button" aria-label="Remove stock">−</button>
-      <input class="card-qty-input" type="number" min="1" value="1" aria-label="Amount" />
-      <button class="card-btn card-btn--add" type="button" aria-label="Add stock">+</button>
-    </div>
-    <div class="card-stock-msg" aria-live="polite"></div>
   </div>
   {% endfor %}
 </div>
@@ -266,68 +260,6 @@
     noResults.hidden = visible > 0;
   });
 
-  /* ── Inline stock control ── */
-  document.getElementById('card-grid').addEventListener('click', e => {
-    const btn = e.target.closest('.card-btn');
-    if (!btn) return;
-    e.preventDefault();
-    adjustStock(btn.closest('.card'), btn.classList.contains('card-btn--add') ? 1 : -1);
-  });
-
-  async function adjustStock(card, delta) {
-    const itemId      = card.dataset.itemId;
-    const currentPkgs = parseInt(card.dataset.packages, 10) || 0;
-    const qtyInput    = card.querySelector('.card-qty-input');
-    const msgEl       = card.querySelector('.card-stock-msg');
-    const amount      = parseInt(qtyInput.value, 10);
-
-    if (!amount || amount < 1) return;
-
-    const newPkgs = currentPkgs + delta * amount;
-    if (newPkgs < 0) { showMsg(msgEl, 'Not enough stock', 'error'); return; }
-
-    const buttons = card.querySelectorAll('.card-btn');
-    buttons.forEach(b => b.disabled = true);
-
-    try {
-      const res = await fetch(`/api/inventory/${itemId}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ number_of_packages: newPkgs }),
-      });
-      if (!res.ok) throw new Error();
-      const data = await res.json();
-
-      card.dataset.packages = newPkgs;
-
-      const qtyEl = card.querySelector('.quantity-value');
-      if (qtyEl && data.quantity != null) {
-        const q = Math.round(data.quantity * 1e6) / 1e6;
-        qtyEl.textContent = q === Math.floor(q) ? Math.floor(q) : q;
-      }
-      const badge = card.querySelector('.packages-badge');
-      if (badge) {
-        const pt = card.dataset.packageType;
-        const label = (!pt || pt === 'no_package' || pt === 'no package')
-          ? 'pkgs'
-          : pt === 'box' ? 'boxes' : `${pt}s`;
-        badge.textContent = `${newPkgs} ${label}`;
-      }
-
-      showMsg(msgEl, delta > 0 ? `+${amount} added` : `−${amount} removed`, 'ok');
-    } catch {
-      showMsg(msgEl, 'Update failed', 'error');
-    } finally {
-      buttons.forEach(b => b.disabled = false);
-    }
-  }
-
-  function showMsg(el, text, type) {
-    el.textContent = text;
-    el.className = `card-stock-msg card-stock-msg--${type}`;
-    clearTimeout(el._timer);
-    el._timer = setTimeout(() => { el.textContent = ''; el.className = 'card-stock-msg'; }, 2500);
-  }
 
 </script>
 
