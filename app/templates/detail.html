@@ -10,6 +10,43 @@
   <h1 class="page-title">{{ item.item_name }}</h1>
 </div>
 
+{# ── Stock control ── #}
+{%- set _pkg_count = item.number_of_packages if item.number_of_packages is not none else 0 -%}
+{%- set _qty_int = item.quantity | int if item.quantity == item.quantity | int else item.quantity -%}
+<section class="detail-section"
+         data-item-id="{{ item.item_id }}"
+         data-packages="{{ _pkg_count }}"
+         id="stock-control">
+  <h2 class="section-title">Adjust Stock</h2>
+  <div class="stock-summary">
+    <div class="stock-stat">
+      <span class="stock-stat-value" id="pkg-display">{{ _pkg_count }}</span>
+      <span class="stock-stat-label">packages</span>
+    </div>
+    <div class="stock-stat">
+      <span class="stock-stat-value" id="current-qty-display">{{ _qty_int }}</span>
+      <span class="stock-stat-label">{{ item.quantity_type }} total</span>
+    </div>
+  </div>
+  <div class="stock-form">
+    <div class="stock-form-row">
+      <div class="form-group">
+        <label class="form-label" for="adj-amount">Amount</label>
+        <input class="form-input" id="adj-amount" type="number" min="1" value="1" />
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="adj-comment">Comment (optional)</label>
+        <input class="form-input" id="adj-comment" type="text" placeholder="e.g. Weekly delivery, Used for event…" />
+      </div>
+    </div>
+    <div class="stock-actions">
+      <button class="btn btn-add" type="button" id="btn-add">+ Add</button>
+      <button class="btn btn-withdraw" type="button" id="btn-withdraw">− Withdraw</button>
+    </div>
+  </div>
+  <div class="stock-msg" id="stock-msg" aria-live="polite"></div>
+</section>
+
 {# ── Item details ── #}
 <section class="detail-section">
   <h2 class="section-title">Item Details</h2>
@@ -27,23 +64,8 @@
       <dd class="detail-value">{{ item.package_type }}</dd>
     </div>
     <div class="detail-row">
-      <dt class="detail-label">Number of packages</dt>
-      <dd class="detail-value" id="pkg-display">{{ item.number_of_packages if item.number_of_packages is not none else '—' }}</dd>
-    </div>
-    <div class="detail-row">
       <dt class="detail-label">Quantity per package</dt>
       <dd class="detail-value">{{ item.quantity_per_package }} {{ item.quantity_type }}</dd>
-    </div>
-    <div class="detail-row">
-      <dt class="detail-label">Quantity</dt>
-      <dd class="detail-value" id="current-qty-display">
-        {{ item.quantity | int if item.quantity == item.quantity | int else item.quantity }}
-        {{ item.quantity_type }}
-      </dd>
-    </div>
-    <div class="detail-row">
-      <dt class="detail-label">Quantity type</dt>
-      <dd class="detail-value">{{ item.quantity_type }}</dd>
     </div>
     <div class="detail-row">
       <dt class="detail-label">Batch</dt>
@@ -59,6 +81,12 @@
         {% if item.pricing %}${{ "%.2f" | format(item.pricing) }}{% else %}—{% endif %}
       </dd>
     </div>
+    {% if item.expiration_date %}
+    <div class="detail-row">
+      <dt class="detail-label">Expiration date</dt>
+      <dd class="detail-value">{{ item.expiration_date }}</dd>
+    </div>
+    {% endif %}
     {% if item.related_dishes %}
     <div class="detail-row detail-row--full">
       <dt class="detail-label">Related dishes</dt>
@@ -68,26 +96,12 @@
   </dl>
 </section>
 
-{# ── Stock control ── #}
-<section class="detail-section"
-         data-item-id="{{ item.item_id }}"
-         data-packages="{{ item.number_of_packages if item.number_of_packages is not none else 0 }}"
-         id="stock-control">
-  <h2 class="section-title">Adjust Stock</h2>
-  <div class="stock-row">
-    <input class="qty-input" id="adj-amount" type="number" min="1" value="1" placeholder="Qty" />
-    <button class="btn btn-add" type="button" id="btn-add">+ Add</button>
-    <button class="btn btn-withdraw" type="button" id="btn-withdraw">− Withdraw</button>
-  </div>
-  <div class="stock-msg" id="stock-msg" aria-live="polite"></div>
-</section>
-
 {# ── Transaction history ── #}
-<section class="detail-section">
+<section class="detail-section" id="tx-section">
   <h2 class="section-title">Transaction History</h2>
   {% if transactions %}
   <div class="table-wrap">
-    <table class="tx-table">
+    <table class="tx-table" id="tx-table">
       <thead>
         <tr>
           <th>Date</th>
@@ -96,7 +110,7 @@
           <th>Comments</th>
         </tr>
       </thead>
-      <tbody>
+      <tbody id="tx-body">
         {% for tx in transactions %}
         <tr>
           <td class="tx-date">{{ tx.date_of_action.strftime('%Y-%m-%d %H:%M') }}</td>
@@ -109,16 +123,17 @@
     </table>
   </div>
   {% else %}
-  <p class="no-results">No transactions recorded for this item yet.</p>
+  <p class="no-results" id="tx-empty">No transactions recorded for this item yet.</p>
   {% endif %}
 </section>
 
 <script>
-  const section   = document.getElementById('stock-control');
-  const itemId    = section.dataset.itemId;
-  const amountEl  = document.getElementById('adj-amount');
-  const msgEl     = document.getElementById('stock-msg');
-  let currentPkgs = parseInt(section.dataset.packages, 10) || 0;
+  const section    = document.getElementById('stock-control');
+  const itemId     = section.dataset.itemId;
+  const amountEl   = document.getElementById('adj-amount');
+  const commentEl  = document.getElementById('adj-comment');
+  const msgEl      = document.getElementById('stock-msg');
+  let currentPkgs  = parseInt(section.dataset.packages, 10) || 0;
 
   document.getElementById('btn-add').addEventListener('click', () => adjustStock(1));
   document.getElementById('btn-withdraw').addEventListener('click', () => adjustStock(-1));
@@ -133,8 +148,12 @@
     const buttons = section.querySelectorAll('.btn');
     buttons.forEach(b => b.disabled = true);
 
+    const comment = commentEl.value.trim();
+    const url = new URL(`/api/inventory/${itemId}`, location.origin);
+    if (comment) url.searchParams.set('comment', comment);
+
     try {
-      const res = await fetch(`/api/inventory/${itemId}`, {
+      const res = await fetch(url, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ number_of_packages: newPkgs }),
@@ -143,23 +162,39 @@
       const data = await res.json();
 
       currentPkgs = newPkgs;
+      commentEl.value = '';
 
-      const pkgDisplay = document.getElementById('pkg-display');
-      if (pkgDisplay) pkgDisplay.textContent = newPkgs;
+      document.getElementById('pkg-display').textContent = newPkgs;
 
       const qtyDisplay = document.getElementById('current-qty-display');
-      if (qtyDisplay && data.quantity != null) {
+      if (data.quantity != null) {
         const q = Math.round(data.quantity * 1e6) / 1e6;
-        const qStr = q === Math.floor(q) ? Math.floor(q) : q;
-        qtyDisplay.textContent = `${qStr} {{ item.quantity_type }}`;
+        qtyDisplay.textContent = q === Math.floor(q) ? Math.floor(q) : q;
       }
 
+      addTxRow(delta > 0 ? 'add' : 'withdraw', `${amount} package(s)`, comment);
       showMsg(delta > 0 ? `+${amount} package(s) added` : `−${amount} package(s) removed`, 'ok');
     } catch {
       showMsg('Update failed', 'error');
     } finally {
       buttons.forEach(b => b.disabled = false);
     }
+  }
+
+  function addTxRow(actionType, detail, comment) {
+    const empty = document.getElementById('tx-empty');
+    if (empty) {
+      const wrap = document.createElement('div');
+      wrap.className = 'table-wrap';
+      wrap.innerHTML = `<table class="tx-table" id="tx-table"><thead><tr><th>Date</th><th>Action</th><th>Detail</th><th>Comments</th></tr></thead><tbody id="tx-body"></tbody></table>`;
+      empty.replaceWith(wrap);
+    }
+    const tbody = document.getElementById('tx-body');
+    const now = new Date();
+    const date = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+    const row = document.createElement('tr');
+    row.innerHTML = `<td class="tx-date">${date}</td><td><span class="tx-badge tx-badge--${actionType}">${actionType}</span></td><td>${detail}</td><td class="tx-comments">${comment || '—'}</td>`;
+    tbody.insertBefore(row, tbody.firstChild);
   }
 
   function showMsg(text, type) {

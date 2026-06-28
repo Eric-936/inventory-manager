@@ -86,10 +86,27 @@ class InventoryService:
 			reverse=True,
 		)
 
-	def update_item(self, item_id: int, payload: InventoryUpdate) -> InventoryItem:
+	def update_item(self, item_id: int, payload: InventoryUpdate, *, comment: str | None = None) -> InventoryItem:
+		old_item = self.repository.get_item(item_id)
+		if old_item is None:
+			raise ItemNotFoundError(f"Item {item_id} was not found.")
+
 		updated_item = self.repository.update_item(item_id, payload)
 		if updated_item is None:
 			raise ItemNotFoundError(f"Item {item_id} was not found.")
+
+		if payload.number_of_packages is not None and old_item.number_of_packages is not None:
+			diff = payload.number_of_packages - old_item.number_of_packages
+			if diff != 0:
+				action_type = "add" if diff > 0 else "withdraw"
+				detail = f"{abs(diff)} package(s)"
+				self.repository.append_transaction(
+					item_id=item_id,
+					action_type=action_type,
+					action_detail=detail,
+					comments=comment,
+				)
+
 		return updated_item
 
 	def delete_item(self, item_id: int) -> None:
