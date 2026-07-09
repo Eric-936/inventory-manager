@@ -112,9 +112,15 @@
         </div>
       </div>
 
-      <div class="form-group">
-        <label class="form-label" for="f-pricing">Pricing per unit</label>
-        <input class="form-input" id="f-pricing" type="number" name="pricing" min="0" step="0.01" />
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label" for="f-pricing">Pricing per unit</label>
+          <input class="form-input" id="f-pricing" type="number" name="pricing" min="0" step="0.01" />
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="f-location">Storage location</label>
+          <input class="form-input" id="f-location" type="text" name="storage_location" placeholder="e.g. F1A1" />
+        </div>
       </div>
 
       <p id="modal-error" class="modal-error" hidden></p>
@@ -147,39 +153,19 @@
   {%- set _sg = suggestions.get(item.item_id) if suggestions is defined else none -%}
   {%- set _urgency = _sg.urgency if _sg else 'ok' -%}
   {%- if _urgency == 'critical' -%}
-    {%- set _card_border = '1px solid var(--color-border)' -%}
-    {%- set _banner_bg   = '#E24B4A' -%}
     {%- set _banner_icon = 'alert-triangle' -%}
     {%- set _banner_text = 'Critical — restock now' -%}
     {%- set _reason_msg  = 'Restock urgently — low stock and expiring soon' -%}
-    {%- set _qty_color   = '#A32D2D' -%}
-    {%- set _reason_color = '#A32D2D' -%}
   {%- elif _urgency == 'expiring_soon' -%}
-    {%- set _card_border = '1px solid var(--color-border)' -%}
-    {%- set _banner_bg   = '#EF9F27' -%}
     {%- set _banner_icon = 'clock' -%}
     {%- set _banner_text = 'Expiring soon' -%}
     {%- set _reason_msg  = 'Check expiry date before next service' -%}
-    {%- set _qty_color   = '' -%}
-    {%- set _reason_color = '#854F0B' -%}
   {%- elif _urgency == 'low_stock' -%}
-    {%- set _card_border = '1px solid var(--color-border)' -%}
-    {%- set _banner_bg   = '#378ADD' -%}
     {%- set _banner_icon = 'arrow-down' -%}
     {%- set _banner_text = 'Low stock' -%}
     {%- set _reason_msg  = 'Running low — consider restocking' -%}
-    {%- set _qty_color   = '' -%}
-    {%- set _reason_color = '#185FA5' -%}
-  {%- else -%}
-    {%- set _card_border = '0.5px solid var(--color-border)' -%}
-    {%- set _banner_bg   = '' -%}
-    {%- set _banner_icon = '' -%}
-    {%- set _banner_text = '' -%}
-    {%- set _qty_color   = '' -%}
-    {%- set _reason_color = '' -%}
   {%- endif -%}
-  <div class="card"
-       style="border: {{ _card_border }};"
+  <div class="card card--{{ _urgency }}"
        data-name="{{ item.item_name | lower }}"
        data-item-id="{{ item.item_id }}"
        data-packages="{{ item.number_of_packages if item.number_of_packages is not none else 0 }}"
@@ -192,17 +178,17 @@
 
     <a class="card-link" href="/item/{{ item.item_id }}">
       {%- if _urgency != 'ok' -%}
-      <div style="background: {{ _banner_bg }}; margin: -1.125rem -1.25rem 0; padding: 8px 14px; display: flex; align-items: center; gap: 8px; border-radius: var(--radius-lg) var(--radius-lg) 0 0;">
-        <i class="ti ti-{{ _banner_icon }}" style="font-size: 16px; color: #fff;"></i>
-        <span style="font-size: 12px; font-weight: 500; color: #fff;">{{ _banner_text }}</span>
+      <div class="card-banner card-banner--{{ _urgency }}">
+        <i class="ti ti-{{ _banner_icon }}"></i>
+        <span>{{ _banner_text }}</span>
       </div>
       {%- endif -%}
       {% if item.picture_of_items %}
-      <div class="card-image"{% if _urgency != 'ok' %} style="margin-top: -.625rem"{% endif %}>
+      <div class="card-image">
         <img src="{{ item.picture_of_items }}" alt="{{ item.item_name }}" loading="lazy" />
       </div>
       {% else %}
-      <div class="card-image card-image--{{ item.storage_type }}"{% if _urgency != 'ok' %} style="margin-top: -.625rem"{% endif %}>
+      <div class="card-image card-image--{{ item.storage_type }}">
         {{ item.item_name[0] | upper }}
       </div>
       {% endif %}
@@ -216,9 +202,13 @@
 
       <h2 class="item-name">{{ item.item_name }}</h2>
 
+      {%- if item.storage_location -%}
+      <span class="location-badge"><i class="ti ti-map-pin"></i>{{ item.storage_location }}</span>
+      {%- endif -%}
+
       {% if _same %}
       <div class="quantity-row">
-        <span class="quantity-value"{% if _qty_color %} style="color: {{ _qty_color }};"{% endif %}>{{ _qty_int }}</span>
+        <span class="quantity-value">{{ _qty_int }}</span>
         <span class="quantity-unit">
           {%- if item.quantity_type == 'box' %}boxes{%- else %}{{ item.quantity_type }}s{%- endif -%}
         </span>
@@ -227,13 +217,13 @@
       {%- set _per_pkg_unit = _pt if _pt and _pt not in ('no_package', 'no package') else 'pkg' -%}
       {%- set _qpp_int = item.quantity_per_package | int if item.quantity_per_package == item.quantity_per_package | int else item.quantity_per_package -%}
       <div class="quantity-row">
-        <span class="quantity-value"{% if _qty_color %} style="color: {{ _qty_color }};"{% endif %}>{{ _qty_int }}</span>
+        <span class="quantity-value">{{ _qty_int }}</span>
         <span class="quantity-unit">{{ item.quantity_type }}</span>
         <span class="quantity-per-pkg">({{ _qpp_int }}&thinsp;{{ item.quantity_type }}/{{ _per_pkg_unit }})</span>
       </div>
       {% endif %}
       {%- if _urgency != 'ok' and _sg -%}
-      <p style="font-size: .7rem; color: {{ _reason_color }}; margin: 0; line-height: 1.4;">{{ _reason_msg }}</p>
+      <p class="card-reason">{{ _reason_msg }}</p>
       {%- endif -%}
     </a>
 
@@ -355,6 +345,9 @@
 
     const pricing = parseFloat(fd.get('pricing'));
     if (!isNaN(pricing)) payload.pricing = pricing;
+
+    const storageLocation = fd.get('storage_location').trim();
+    if (storageLocation) payload.storage_location = storageLocation;
 
     submitBtn.disabled    = true;
     submitBtn.textContent = 'Adding…';

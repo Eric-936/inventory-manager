@@ -1,19 +1,20 @@
+import csv
 from pathlib import Path
 
 from fastapi.testclient import TestClient
 
 from app.main import app
+from app.core.deps import get_inventory_service
 from app.models.inventory import InventoryCreate
 from app.repositories.inventory_repo import ITEM_FIELDNAMES, TRANSACTION_FIELDNAMES, InventoryRepository
-from app.routers.api_inventory import get_inventory_service
 from app.services.inventory_service import InventoryService
 
 
 def _write_csv(path: Path, fieldnames: list[str], rows: list[dict[str, str]]) -> None:
-	lines = [",".join(fieldnames)]
-	for row in rows:
-		lines.append(",".join(str(row.get(field, "")) for field in fieldnames))
-	path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+	with path.open("w", newline="", encoding="utf-8") as csv_file:
+		writer = csv.DictWriter(csv_file, fieldnames=fieldnames)
+		writer.writeheader()
+		writer.writerows(rows)
 
 
 def _build_test_client(tmp_path: Path) -> TestClient:
@@ -30,15 +31,17 @@ def _build_test_client(tmp_path: Path) -> TestClient:
 				"storage_type": "fresh",
 				"shelf_life_type": "short_term",
 				"package_type": "pack",
-				"quantity": "15.5",
-				"quantity_unit": "kg",
-				"batch_number": "BATCH-001",
+				"quantity": "15.0",
+				"quantity_type": "kg",
+				"quantity_per_package": "1.5",
+				"batch_based_inventory": "N/A",
 				"expiration_date": "2026-05-31",
 				"supplier_name": "Fresh Farm Co.",
-				"price_per_unit": "12.5",
-				"reorder_threshold": "5.0",
+				"pricing": "12.5",
 				"related_dishes": "Pho Bo",
-				"picture_url": "https://example.com/beef.jpg",
+				"picture_of_items": "/static/images/items/beef.jpg",
+				"number_of_packages": "10",
+				"storage_location": "F1A1",
 			}
 		],
 	)
@@ -50,10 +53,8 @@ def _build_test_client(tmp_path: Path) -> TestClient:
 				"action_id": "1",
 				"item_id": "1",
 				"action_type": "add",
-				"action_detail": "purchase",
-				"quantity_changed": "15.5",
-				"date_of_action": "2026-05-21 08:00:00",
-				"staff_name": "Minh",
+				"action_detail": "10 package(s)",
+				"date_of_action": "2026-05-21 08:00:00+00:00",
 				"comments": "Initial stock",
 			}
 		],
@@ -78,7 +79,7 @@ def test_get_inventory_returns_items_and_transactions(tmp_path: Path) -> None:
 	assert len(payload["transactions"]) == 1
 
 
-def test_post_inventory_updates_existing_item_quantity(tmp_path: Path) -> None:
+def test_post_inventory_restocks_existing_item(tmp_path: Path) -> None:
 	client = _build_test_client(tmp_path)
 
 	response = client.post(
@@ -88,22 +89,22 @@ def test_post_inventory_updates_existing_item_quantity(tmp_path: Path) -> None:
 			storage_type="fresh",
 			shelf_life_type="short_term",
 			package_type="pack",
-			quantity=2.0,
-			quantity_unit="kg",
-			batch_number="BATCH-001",
+			quantity_type="kg",
+			quantity_per_package=1.5,
+			batch_based_inventory="N/A",
 			expiration_date="2026-05-31",
 			supplier_name="Fresh Farm Co.",
-			price_per_unit=12.5,
-			reorder_threshold=5.0,
+			pricing=12.5,
 			related_dishes="Pho Bo",
-			picture_url="https://example.com/beef.jpg",
+			number_of_packages=2,
 		).model_dump(mode="json"),
 	)
 
 	assert response.status_code == 201
 	payload = response.json()
 	assert payload["operation"] == "updated"
-	assert payload["item"]["quantity"] == 17.5
+	assert payload["item"]["number_of_packages"] == 12
+	assert payload["item"]["quantity"] == 18.0
 
 
 def test_put_inventory_updates_single_item(tmp_path: Path) -> None:
@@ -111,12 +112,14 @@ def test_put_inventory_updates_single_item(tmp_path: Path) -> None:
 
 	response = client.put(
 		"/api/inventory/1",
-		json={"supplier_name": "Updated Supplier", "quantity": 12.0},
+		json={"supplier_name": "Updated Supplier", "number_of_packages": 8},
 	)
 
 	assert response.status_code == 200
 	payload = response.json()
 	assert payload["supplier_name"] == "Updated Supplier"
+	assert payload["number_of_packages"] == 8
+	# quantity is always derived from number_of_packages × quantity_per_package
 	assert payload["quantity"] == 12.0
 
 

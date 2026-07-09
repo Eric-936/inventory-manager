@@ -1,4 +1,5 @@
-from datetime import date, datetime, timedelta
+import csv
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 
 from app.models.inventory import InventoryCreate, InventoryUpdate
@@ -7,10 +8,10 @@ from app.services.inventory_service import InventoryService, ItemNotFoundError
 
 
 def _write_csv(path: Path, fieldnames: list[str], rows: list[dict[str, str]]) -> None:
-	lines = [",".join(fieldnames)]
-	for row in rows:
-		lines.append(",".join(str(row.get(field, "")) for field in fieldnames))
-	path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+	with path.open("w", newline="", encoding="utf-8") as csv_file:
+		writer = csv.DictWriter(csv_file, fieldnames=fieldnames)
+		writer.writeheader()
+		writer.writerows(rows)
 
 
 def _build_service(tmp_path: Path) -> InventoryService:
@@ -28,14 +29,16 @@ def _build_service(tmp_path: Path) -> InventoryService:
 				"shelf_life_type": "short_term",
 				"package_type": "pack",
 				"quantity": "10.0",
-				"quantity_unit": "kg",
-				"batch_number": "BATCH-001",
+				"quantity_type": "kg",
+				"quantity_per_package": "2.0",
+				"batch_based_inventory": "N/A",
 				"expiration_date": "2026-05-31",
 				"supplier_name": "Fresh Farm Co.",
-				"price_per_unit": "8.0",
-				"reorder_threshold": "4.0",
+				"pricing": "8.0",
 				"related_dishes": "Pho Ga",
-				"picture_url": "https://example.com/chicken.jpg",
+				"picture_of_items": "",
+				"number_of_packages": "5",
+				"storage_location": "",
 			}
 		],
 	)
@@ -47,10 +50,8 @@ def _build_service(tmp_path: Path) -> InventoryService:
 				"action_id": "1",
 				"item_id": "1",
 				"action_type": "add",
-				"action_detail": "purchase",
-				"quantity_changed": "10.0",
-				"date_of_action": "2026-05-21 08:00:00",
-				"staff_name": "Minh",
+				"action_detail": "5 package(s)",
+				"date_of_action": "2026-05-21 08:00:00+00:00",
 				"comments": "Initial stock",
 			}
 		],
@@ -60,7 +61,7 @@ def _build_service(tmp_path: Path) -> InventoryService:
 	return InventoryService(repository)
 
 
-def test_add_or_create_item_increases_quantity_for_existing_item(tmp_path: Path) -> None:
+def test_add_or_create_item_increases_packages_for_existing_item(tmp_path: Path) -> None:
 	service = _build_service(tmp_path)
 
 	response = service.add_or_create_item(
@@ -69,20 +70,20 @@ def test_add_or_create_item_increases_quantity_for_existing_item(tmp_path: Path)
 			storage_type="fresh",
 			shelf_life_type="short_term",
 			package_type="pack",
-			quantity=2.5,
-			quantity_unit="kg",
-			batch_number="BATCH-NEW",
+			quantity_type="kg",
+			quantity_per_package=2.0,
+			batch_based_inventory="N/A",
 			expiration_date="2026-06-01",
 			supplier_name="Fresh Farm Co.",
-			price_per_unit=8.5,
-			reorder_threshold=4.0,
+			pricing=8.5,
 			related_dishes="Pho Ga",
-			picture_url="https://example.com/chicken.jpg",
+			number_of_packages=2,
 		)
 	)
 
 	assert response.operation == "updated"
-	assert response.item.quantity == 12.5
+	assert response.item.number_of_packages == 7
+	assert response.item.quantity == 14.0
 
 
 def test_update_item_changes_target_fields(tmp_path: Path) -> None:
@@ -90,11 +91,13 @@ def test_update_item_changes_target_fields(tmp_path: Path) -> None:
 
 	updated = service.update_item(
 		1,
-		InventoryUpdate(quantity=7.0, supplier_name="Updated Supplier"),
+		InventoryUpdate(number_of_packages=6, supplier_name="Updated Supplier"),
 	)
 
-	assert updated.quantity == 7.0
 	assert updated.supplier_name == "Updated Supplier"
+	assert updated.number_of_packages == 6
+	# quantity is always derived from number_of_packages × quantity_per_package
+	assert updated.quantity == 12.0
 
 
 def test_delete_item_raises_for_missing_id(tmp_path: Path) -> None:
@@ -154,7 +157,7 @@ def _build_restock_service(
 
 def _make_withdraw_rows(item_id: int, count: int, start_id: int = 1) -> list[dict[str, str]]:
 	"""Return `count` withdraw transaction rows dated yesterday (within the 7-day window)."""
-	recent = (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%d %H:%M:%S")
+	recent = (datetime.now(UTC) - timedelta(days=1)).isoformat(sep=" ", timespec="seconds")
 	return [
 		{
 			"action_id": str(start_id + i),
