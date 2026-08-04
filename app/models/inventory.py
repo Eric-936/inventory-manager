@@ -18,6 +18,7 @@ class InventoryBase(BaseModel):
 	related_dishes: str | None = None
 	picture_of_items: str | None = None
 	number_of_packages: int | None = None
+	storage_location: str | None = None      # e.g. F1A1 = room F1, shelf A, level 1
 	quantity: float | None = None            # computed: number_of_packages × quantity_per_package
 
 	@field_validator(
@@ -39,7 +40,7 @@ class InventoryBase(BaseModel):
 			raise ValueError("Field cannot be empty.")
 		return stripped
 
-	@field_validator("related_dishes", "picture_of_items", mode="before")
+	@field_validator("related_dishes", "picture_of_items", "storage_location", mode="before")
 	@classmethod
 	def normalize_optional_strings(cls, value: str | None) -> str | None:
 		if value is None:
@@ -85,6 +86,7 @@ class InventoryUpdate(BaseModel):
 	related_dishes: str | None = None
 	picture_of_items: str | None = None
 	number_of_packages: int | None = None
+	storage_location: str | None = None
 
 	model_config = ConfigDict(extra="forbid")
 
@@ -107,7 +109,7 @@ class InventoryUpdate(BaseModel):
 			raise ValueError("Field cannot be empty.")
 		return stripped
 
-	@field_validator("related_dishes", "picture_of_items", mode="before")
+	@field_validator("related_dishes", "picture_of_items", "storage_location", mode="before")
 	@classmethod
 	def normalize_optional_update_strings(cls, value: str | None) -> str | None:
 		if value is None:

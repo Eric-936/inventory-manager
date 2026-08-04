@@ -4,9 +4,8 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 
-from app.core.config import ITEMS_CSV_PATH, TRANSACTIONS_CSV_PATH
-from app.repositories.inventory_repo import InventoryRepository
-from app.services.inventory_service import InventoryService, ItemNotFoundError
+from app.core.deps import get_inventory_service
+from app.services.inventory_service import URGENCY_RANK, InventoryService, ItemNotFoundError
 
 
 TEMPLATES_DIR = Path(__file__).resolve().parent.parent / "templates"
@@ -21,17 +20,6 @@ templates.env.globals["asset_version"] = lambda: int(STYLE_CSS_PATH.stat().st_mt
 router = APIRouter(tags=["pages"])
 
 
-def get_inventory_service() -> InventoryService:
-    repository = InventoryRepository(
-        items_path=ITEMS_CSV_PATH,
-        transactions_path=TRANSACTIONS_CSV_PATH,
-    )
-    return InventoryService(repository)
-
-
-_URGENCY_RANK = {"critical": 0, "expiring_soon": 1, "low_stock": 2, "ok": 3}
-
-
 @router.get("/", response_class=HTMLResponse)
 def index(
     request: Request,
@@ -42,7 +30,7 @@ def index(
     suggestions = {s.item_id: s for s in restock_data.suggestions}
     sorted_items = sorted(
         overview.items,
-        key=lambda i: _URGENCY_RANK.get(
+        key=lambda i: URGENCY_RANK.get(
             suggestions[i.item_id].urgency if i.item_id in suggestions else "ok", 3
         ),
     )

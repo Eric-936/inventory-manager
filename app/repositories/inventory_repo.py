@@ -1,4 +1,5 @@
 import csv
+import os
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -26,6 +27,7 @@ ITEM_FIELDNAMES = [
 	"related_dishes",
 	"picture_of_items",
 	"number_of_packages",
+	"storage_location",
 ]
 
 TRANSACTION_FIELDNAMES = [
@@ -155,10 +157,14 @@ class InventoryRepository:
 		rows: list[dict[str, str]],
 	) -> None:
 		path.parent.mkdir(parents=True, exist_ok=True)
-		with path.open("w", newline="", encoding="utf-8") as csv_file:
+		# Write to a temp file and atomically swap it in, so a crash mid-write
+		# can never leave a truncated CSV behind.
+		tmp_path = path.with_name(path.name + ".tmp")
+		with tmp_path.open("w", newline="", encoding="utf-8") as csv_file:
 			writer = csv.DictWriter(csv_file, fieldnames=fieldnames)
 			writer.writeheader()
 			writer.writerows(rows)
+		os.replace(tmp_path, path)
 
 	def _parse_item(self, row: dict[str, str]) -> InventoryItem:
 		raw_packages = row.get("number_of_packages")
@@ -193,6 +199,7 @@ class InventoryRepository:
 			related_dishes=row.get("related_dishes") or None,
 			picture_of_items=row.get("picture_of_items") or None,
 			number_of_packages=packages,
+			storage_location=row.get("storage_location") or None,
 		)
 
 	def _serialize_item(self, item: InventoryItem) -> dict[str, str]:
@@ -219,6 +226,7 @@ class InventoryRepository:
 			"related_dishes": item.related_dishes or "",
 			"picture_of_items": item.picture_of_items or "",
 			"number_of_packages": str(item.number_of_packages) if item.number_of_packages is not None else "",
+			"storage_location": item.storage_location or "",
 		}
 
 	def _parse_transaction(self, row: dict[str, str]) -> TransactionRecord:

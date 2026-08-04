@@ -8,6 +8,7 @@ guide/
 
 # Ignore Claude Code session files
 .claude/
+CLAUDE.md
 
 # Ignore local static assets (images, uploads)
 app/static/images/

@@ -76,6 +76,10 @@
       <dd class="detail-value">{{ item.supplier_name }}</dd>
     </div>
     <div class="detail-row">
+      <dt class="detail-label">Storage location</dt>
+      <dd class="detail-value">{{ item.storage_location or '—' }}</dd>
+    </div>
+    <div class="detail-row">
       <dt class="detail-label">Pricing</dt>
       <dd class="detail-value">
         {% if item.pricing %}${{ "%.2f" | format(item.pricing) }}{% else %}—{% endif %}
@@ -193,7 +197,15 @@
     const now = new Date();
     const date = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
     const row = document.createElement('tr');
-    row.innerHTML = `<td class="tx-date">${date}</td><td><span class="tx-badge tx-badge--${actionType}">${actionType}</span></td><td>${detail}</td><td class="tx-comments">${comment || '—'}</td>`;
+    // Static skeleton only — user-provided values are set via textContent below
+    // so they can never be parsed as HTML.
+    row.innerHTML = `<td class="tx-date"></td><td><span class="tx-badge"></span></td><td></td><td class="tx-comments"></td>`;
+    row.children[0].textContent = date;
+    const badge = row.children[1].firstChild;
+    badge.classList.add(`tx-badge--${actionType}`);
+    badge.textContent = actionType;
+    row.children[2].textContent = detail;
+    row.children[3].textContent = comment || '—';
     tbody.insertBefore(row, tbody.firstChild);
   }
 

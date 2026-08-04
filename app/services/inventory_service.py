@@ -1,5 +1,5 @@
 from collections import defaultdict
-from datetime import datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 
 from app.models.inventory import (
 	InventoryCreate,
@@ -23,6 +23,8 @@ _SHELF_LIFE_CONFIG: dict[str, dict[str, int]] = {
 _DEFAULT_SHELF_LIFE_CONFIG: dict[str, int] = {"expiry_days": 7}
 _OBSERVATION_DAYS = 30
 _LOW_STOCK_DAYS = 7
+
+URGENCY_RANK = {"critical": 0, "expiring_soon": 1, "low_stock": 2, "ok": 3}
 
 
 class ItemNotFoundError(Exception):
@@ -115,11 +117,10 @@ class InventoryService:
 			raise ItemNotFoundError(f"Item {item_id} was not found.")
 
 	def get_restock_suggestions(self) -> RestockSuggestionsResponse:
-		from datetime import date
-
 		today = date.today()
-		cutoff = datetime.now() - timedelta(days=_OBSERVATION_DAYS)
-		cutoff_7d = datetime.now() - timedelta(days=_LOW_STOCK_DAYS)
+		now = datetime.now(UTC)
+		cutoff = now - timedelta(days=_OBSERVATION_DAYS)
+		cutoff_7d = now - timedelta(days=_LOW_STOCK_DAYS)
 
 		items = self.repository.list_items()
 		transactions = self.repository.list_transactions()
@@ -130,8 +131,10 @@ class InventoryService:
 		for t in transactions:
 			if t.action_type != "withdraw":
 				continue
-			# Strip timezone so naive and aware datetimes compare cleanly.
-			action_dt = t.date_of_action.replace(tzinfo=None)
+			# Transactions are written as UTC; treat legacy naive rows as UTC too.
+			action_dt = t.date_of_action
+			if action_dt.tzinfo is None:
+				action_dt = action_dt.replace(tzinfo=UTC)
 			if action_dt >= cutoff:
 				withdrawal_counts[t.item_id] += 1
 			if action_dt >= cutoff_7d:
@@ -199,6 +202,5 @@ class InventoryService:
 				reason=reason,
 			))
 
-		_urgency_rank = {"critical": 0, "expiring_soon": 1, "low_stock": 2, "ok": 3}
-		suggestions.sort(key=lambda s: _urgency_rank[s.urgency])
+		suggestions.sort(key=lambda s: URGENCY_RANK[s.urgency])
 		return RestockSuggestionsResponse(generated_at=today, suggestions=suggestions)
